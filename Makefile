@@ -6,7 +6,7 @@ TARGET = classifier
 SRCS = main.c master.c worker.c utils.c task_queue.c frame_io.c
 OBJS = $(SRCS:.c=.o)
 
-CUDA_SRCS = cuda_filter.cu
+CUDA_SRCS = sobel_filter.cu
 CUDA_OBJS = $(CUDA_SRCS:.cu=.o)
 
 %.o: %.cu

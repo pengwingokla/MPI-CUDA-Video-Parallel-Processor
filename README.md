@@ -88,6 +88,10 @@ Check if output frames match input frames
 ```
 ls output/ | wc -l  # Should match number of input frames
 ```
+Combine the processed frames to a video
+```
+ffmpeg -framerate 30 -i output/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p sobel_output.mp4
+```
 ## 📦 Output
 Each processed frame will be saved to output/frame_XXXX.jpg.
 
