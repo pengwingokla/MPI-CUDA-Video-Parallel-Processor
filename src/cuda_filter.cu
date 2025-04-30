@@ -87,21 +87,59 @@ __global__ void non_max_suppression_kernel(unsigned char* gradient, float* direc
     }
 }
 
+// Apply double thresholding
+__global__ void double_threshold_kernel(unsigned char* input, unsigned char* output, int width, int height, unsigned char low_thresh, unsigned char high_thresh) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    unsigned char val = input[idx];
+    if (val >= high_thresh) {
+        output[idx] = 255;  // Strong edge
+    } else if (val >= low_thresh) {
+        output[idx] = 100;  // Weak edge
+    } else {
+        output[idx] = 0;    // Non-edge
+    }
+}
+
+// Edge tracking by hysteresis (simple iterative propagation)
+__global__ void edge_tracking_kernel(unsigned char* input, unsigned char* output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    if (input[i] != 100) return; // Only look at weak edges
+
+    // Check 8-neighborhood for strong edge (255)
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (dy == 0 && dx == 0) continue;
+            int ni = (y + dy) * width + (x + dx);
+            if (input[ni] == 255) {
+                output[i] = 255;
+                return;
+            }
+        }
+    }
+    output[i] = 0;
+}
+
 extern "C"
 void cuda_canny(unsigned char* input, unsigned char* output, int width, int height, int channels) {
     int img_size = width * height;
-    unsigned char *d_input, *d_gray, *d_blur, *d_edge;
+    unsigned char *d_input, *d_gray, *d_blur, *d_edge, *d_nms, *d_thresh, *d_final;
     float* d_direction;
-    unsigned char* d_nms;
 
     cudaMalloc(&d_input, img_size * channels);
     cudaMalloc(&d_gray, img_size);
     cudaMalloc(&d_blur, img_size);
     cudaMalloc(&d_edge, img_size);
     cudaMalloc(&d_nms, img_size);
+    cudaMalloc(&d_thresh, img_size);
+    cudaMalloc(&d_final, img_size);
     cudaMalloc(&d_direction, img_size * sizeof(float));
 
-    // Copy input and launch kernels
     cudaMemcpy(d_input, input, img_size * channels, cudaMemcpyHostToDevice);
 
     int threads = 256;
@@ -112,16 +150,23 @@ void cuda_canny(unsigned char* input, unsigned char* output, int width, int heig
     dim3 numBlocks((width + 15) / 16, (height + 15) / 16);
     gaussian_blur_kernel<<<numBlocks, threadsPerBlock>>>(d_gray, d_blur, width, height);
     sobel_kernel<<<numBlocks, threadsPerBlock>>>(d_blur, d_edge, d_direction, width, height);
-    non_max_suppression_kernel<<<numBlocks, threadsPerBlock>>>(
-        d_edge, d_direction, d_nms, width, height
-    );
-    
-    cudaMemcpy(output, d_nms, img_size, cudaMemcpyDeviceToHost);
+    non_max_suppression_kernel<<<numBlocks, threadsPerBlock>>>(d_edge, d_direction, d_nms, width, height);
+
+    // Apply double thresholding: low = 50, high = 100
+    double_threshold_kernel<<<blocks, threads>>>(d_nms, d_thresh, width, height, 50, 100);
+
+    // Run edge tracking 2 iterations
+    edge_tracking_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_final, width, height);
+    edge_tracking_kernel<<<numBlocks, threadsPerBlock>>>(d_final, d_thresh, width, height);
+
+    cudaMemcpy(output, d_thresh, img_size, cudaMemcpyDeviceToHost);
 
     cudaFree(d_input);
     cudaFree(d_gray);
     cudaFree(d_blur);
     cudaFree(d_edge);
     cudaFree(d_nms);
+    cudaFree(d_thresh);
+    cudaFree(d_final);
     cudaFree(d_direction);
 }
