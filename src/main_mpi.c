@@ -1,5 +1,6 @@
 #include <mpi.h>
 #include <stdio.h>
+#include "utils.h"
 
 void run_master(int world_size);
 void run_worker(int rank);

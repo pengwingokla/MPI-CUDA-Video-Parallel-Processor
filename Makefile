@@ -1,21 +1,33 @@
-CC = mpicc
-NVCC = nvcc
-CFLAGS = -O2 -Wall
-TARGET = classifier
+# Compiler settings
+CC      = mpicc
+NVCC    = nvcc
+CFLAGS  = -O2 -Wall
+LDFLAGS = -lcudart -lm
+INCLUDES = -Iinclude
 
-SRCS = main.c master.c worker.c utils.c task_queue.c frame_io.c
-OBJS = $(SRCS:.c=.o)
+# Sources
+SRC_DIR = src
+CUDA_SRC = $(SRC_DIR)/cuda_filter.cu
+CUDA_OBJ = cuda_filter.o
 
-CUDA_SRCS = sobel_filter.cu
-CUDA_OBJS = $(CUDA_SRCS:.cu=.o)
+FULL_OBJS = \
+  main_mpi_cuda.o \
+  master.o \
+  worker_cuda.o \
+  frame_io.o \
+  task_queue.o \
+  utils.o \
+  $(CUDA_OBJ)
 
-%.o: %.cu
-	$(NVCC) -c $< -o $@
+# Rules
+%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-all: $(TARGET)
+$(CUDA_OBJ): $(CUDA_SRC)
+	$(NVCC) -c $(CUDA_SRC) -o $@ $(INCLUDES)
 
-$(TARGET): $(OBJS) $(CUDA_OBJS)
-	$(CC) -o $@ $(OBJS) $(CUDA_OBJS) -lcudart -lm
+full: $(FULL_OBJS)
+	$(CC) -o full_exec $(FULL_OBJS) $(LDFLAGS)
 
 clean:
-	rm -f *.o $(TARGET)
+	rm -f *.o full_exec
