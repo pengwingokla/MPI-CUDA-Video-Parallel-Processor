@@ -102,27 +102,34 @@ __global__ void double_threshold_kernel(unsigned char* input, unsigned char* out
     }
 }
 
-// Edge tracking by hysteresis (simple iterative propagation)
-__global__ void edge_tracking_kernel(unsigned char* input, unsigned char* output, int width, int height) {
+// DFS-based edge tracking kernel (one pass propagation)
+__global__ void edge_tracking_dfs_kernel(unsigned char* input, unsigned char* output, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
 
     int i = y * width + x;
-    if (input[i] != 100) return; // Only look at weak edges
+    if (input[i] == 255) {
+        output[i] = 255;
+        return;
+    }
 
-    // Check 8-neighborhood for strong edge (255)
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            if (dy == 0 && dx == 0) continue;
-            int ni = (y + dy) * width + (x + dx);
-            if (input[ni] == 255) {
-                output[i] = 255;
-                return;
+    if (input[i] == 100) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int nx = x + dx;
+                int ny = y + dy;
+                int ni = ny * width + nx;
+                if (input[ni] == 255) {
+                    output[i] = 255;
+                    return;
+                }
             }
         }
+        output[i] = 0;
+    } else {
+        output[i] = 0;
     }
-    output[i] = 0;
 }
 
 extern "C"
@@ -156,8 +163,8 @@ void cuda_canny(unsigned char* input, unsigned char* output, int width, int heig
     double_threshold_kernel<<<blocks, threads>>>(d_nms, d_thresh, width, height, 50, 100);
 
     // Run edge tracking 2 iterations
-    edge_tracking_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_final, width, height);
-    edge_tracking_kernel<<<numBlocks, threadsPerBlock>>>(d_final, d_thresh, width, height);
+    edge_tracking_dfs_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_final, width, height);
+    edge_tracking_dfs_kernel<<<numBlocks, threadsPerBlock>>>(d_final, d_thresh, width, height);
 
     cudaMemcpy(output, d_thresh, img_size, cudaMemcpyDeviceToHost);
 
