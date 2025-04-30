@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "utils.h"
 #include "task_queue.h"
 
 #define TAG_TASK_REQUEST 1
@@ -18,12 +19,11 @@ void run_master(int world_size) {
 
     printf("Master: I am alive with %d total processes.\n", world_size);
 
-    // You can simulate some work or just wait a bit
+    // Make master wait
     for (int i = 0; i < 5; ++i) {
         printf("Master: waiting... (%d)\n", i);
         sleep(1);
     }
-
 
     while (active_workers > 0) {
         MPI_Status status;
