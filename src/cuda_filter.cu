@@ -11,7 +11,7 @@ __global__ void rgb_to_gray_kernel(unsigned char* input, unsigned char* gray, in
 }
 
 // Apply Gaussian Blur
-__global__ void gaussian_blur_kernel(unsigned char* gray, unsigned char* blurred, int width, int height) {
+__global__ void gaussian_blur_kernel_3x3(unsigned char* gray, unsigned char* blurred, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
@@ -28,6 +28,35 @@ __global__ void gaussian_blur_kernel(unsigned char* gray, unsigned char* blurred
     }
     blurred[i] = sum / 16;
 }
+
+// Example 5x5 Gaussian (approx. σ = 1.4, normalized)
+__constant__ int gauss5x5[5][5] = {
+    {1,  4,  6,  4, 1},
+    {4, 16, 24, 16, 4},
+    {6, 24, 36, 24, 6},
+    {4, 16, 24, 16, 4},
+    {1,  4,  6,  4, 1}
+};
+
+__global__ void gaussian_blur_kernel_5x5(unsigned char* gray, unsigned char* blurred, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 2 || y < 2 || x >= width - 2 || y >= height - 2) return;
+
+    int sum = 0;
+    int weight_sum = 256;
+    int i = y * width + x;
+
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            int px = x + dx;
+            int py = y + dy;
+            sum += gray[py * width + px] * gauss5x5[dy + 2][dx + 2];
+        }
+    }
+    blurred[i] = sum / weight_sum;
+}
+
 // Apply Sobel filter
 __global__ void sobel_kernel(unsigned char* blurred, unsigned char* edge, float* direction, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -102,6 +131,28 @@ __global__ void double_threshold_kernel(unsigned char* input, unsigned char* out
     }
 }
 
+// Suppress isolated weak edges
+__global__ void suppress_weak_clusters_kernel(unsigned char* input, unsigned char* output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    if (input[i] == 100) { // weak edge
+        int count = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) continue;
+                int ni = (y + dy) * width + (x + dx);
+                if (input[ni] == 100 || input[ni] == 255) count++;
+            }
+        }
+        output[i] = (count >= 5) ? 100 : 0;
+    } else {
+        output[i] = input[i];
+    }
+}
+
 // DFS-based edge tracking kernel (one pass propagation)
 __global__ void edge_tracking_dfs_kernel(unsigned char* input, unsigned char* output, int width, int height) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -132,10 +183,21 @@ __global__ void edge_tracking_dfs_kernel(unsigned char* input, unsigned char* ou
     }
 }
 
+// Temporal Linking Kernel
+__global__ void temporal_link_kernel(unsigned char* curr_edge, unsigned char* prev_edge, unsigned char* output, int width, int height) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    if (curr_edge[idx] && prev_edge[idx])
+        output[idx] = 255;  // Reinforce edge
+    else
+        output[idx] = 0;    // Suppress unstable edge
+}
+
 extern "C"
-void cuda_canny(unsigned char* input, unsigned char* output, int width, int height, int channels) {
+void cuda_canny(unsigned char* input, unsigned char* output, int width, int height, int channels, unsigned char* prev_edge) {
     int img_size = width * height;
-    unsigned char *d_input, *d_gray, *d_blur, *d_edge, *d_nms, *d_thresh, *d_final;
+    unsigned char *d_input, *d_gray, *d_blur, *d_edge, *d_nms, *d_thresh, *d_final, *d_cleaned, *d_prev_edge, *d_temporal;
     float* d_direction;
 
     cudaMalloc(&d_input, img_size * channels);
@@ -145,6 +207,9 @@ void cuda_canny(unsigned char* input, unsigned char* output, int width, int heig
     cudaMalloc(&d_nms, img_size);
     cudaMalloc(&d_thresh, img_size);
     cudaMalloc(&d_final, img_size);
+    cudaMalloc(&d_cleaned, img_size);
+    cudaMalloc(&d_prev_edge, img_size);
+    cudaMalloc(&d_temporal, img_size);
     cudaMalloc(&d_direction, img_size * sizeof(float));
 
     cudaMemcpy(d_input, input, img_size * channels, cudaMemcpyHostToDevice);
@@ -155,12 +220,18 @@ void cuda_canny(unsigned char* input, unsigned char* output, int width, int heig
 
     dim3 threadsPerBlock(16, 16);
     dim3 numBlocks((width + 15) / 16, (height + 15) / 16);
-    gaussian_blur_kernel<<<numBlocks, threadsPerBlock>>>(d_gray, d_blur, width, height);
+    gaussian_blur_kernel_5x5<<<numBlocks, threadsPerBlock>>>(d_gray, d_blur, width, height);
     sobel_kernel<<<numBlocks, threadsPerBlock>>>(d_blur, d_edge, d_direction, width, height);
     non_max_suppression_kernel<<<numBlocks, threadsPerBlock>>>(d_edge, d_direction, d_nms, width, height);
 
     // Apply double thresholding: low = 50, high = 100
     double_threshold_kernel<<<blocks, threads>>>(d_nms, d_thresh, width, height, 50, 100);
+
+    // Suppress weak clusters
+    suppress_weak_clusters_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_cleaned, width, height);
+    
+    // Temporal link kernel
+    temporal_link_kernel<<<blocks, threads>>>(d_thresh, d_prev_edge, d_temporal, width, height);
 
     // Run edge tracking 2 iterations
     edge_tracking_dfs_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_final, width, height);
@@ -175,5 +246,38 @@ void cuda_canny(unsigned char* input, unsigned char* output, int width, int heig
     cudaFree(d_nms);
     cudaFree(d_thresh);
     cudaFree(d_final);
+    cudaFree(d_cleaned);
     cudaFree(d_direction);
+}
+
+//  Basic segmentation kernel
+__global__ void segment_threshold_kernel(unsigned char* input, unsigned char* mask, int width, int height, int threshold) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    mask[idx] = (input[idx] >= threshold) ? 255 : 0;
+}
+
+extern "C"
+void cuda_segment(unsigned char* input, unsigned char* output_mask, int w, int h, int c, unsigned char threshold) {
+    int img_size = w * h;
+    unsigned char *d_input, *d_gray, *d_mask;
+
+    cudaMalloc(&d_input, img_size * c);
+    cudaMalloc(&d_gray, img_size);
+    cudaMalloc(&d_mask, img_size);
+
+    cudaMemcpy(d_input, input, img_size * c, cudaMemcpyHostToDevice);
+
+    int threads = 256;
+    int blocks = (img_size + threads - 1) / threads;
+
+    rgb_to_gray_kernel<<<blocks, threads>>>(d_input, d_gray, w, h, c);
+    segment_threshold_kernel<<<blocks, threads>>>(d_gray, d_mask, w, h, threshold);
+
+    cudaMemcpy(output_mask, d_mask, img_size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_input);
+    cudaFree(d_gray);
+    cudaFree(d_mask);
 }

@@ -92,6 +92,26 @@ Combine the processed frames to a video
 ```
 ffmpeg -framerate 30 -i output/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p sobel_output.mp4
 ```
+
+##  Build Instructions
+
+### Version 1: Serial (no MPI, no CUDA)
+```
+./exec_serial
+```
+### Version 2: MPI-only
+```
+.mpirun -np 4 ./exec_mpi_only
+```
+### Version 3: CUDA-only
+```
+./exec_cuda_only
+```
+### Version 4: MPI + CUDA (multi-node or multi-GPU)
+```
+mpirun -np 8 ./exec_full
+```
+
 ## 📦 Output
 Each processed frame will be saved to output/frame_XXXX.jpg.
 

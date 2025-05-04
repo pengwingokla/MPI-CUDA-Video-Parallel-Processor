@@ -7,6 +7,7 @@ void init_task_queue(TaskQueue* queue) {
     queue->total_tasks = 0;
     queue->current_index = 0;
 
+    // First read all filenames
     DIR* dir = opendir("frames/");
     struct dirent* entry;
 
@@ -24,6 +25,10 @@ void init_task_queue(TaskQueue* queue) {
     }
 
     closedir(dir);
+
+    // Sort frames numerically (assuming format frame_XXXX.jpg)
+    qsort(queue->filenames, queue->total_tasks, MAX_FILENAME_LEN, 
+        (int (*)(const void*, const void*))strcmp);
 }
 
 const char* get_next_task(TaskQueue* queue) {
