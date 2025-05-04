@@ -3,7 +3,7 @@
 #include "utils.h"
 
 void run_master(int world_size);
-void run_worker_cuda(int rank);
+void run_worker_cuda(int rank, int world_size);
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     if (rank == 0) {
         run_master(world_size);
     } else {
-        run_worker_cuda(rank);
+        run_worker_cuda(rank, world_size);
     }
 
     double end_time = MPI_Wtime();
