@@ -52,7 +52,7 @@ int main() {
         unsigned char* edges = malloc(w * h);
         cuda_canny(img, edges, w, h, c, NULL);  // No temporal linking for now
 
-        snprintf(output_filename, sizeof(output_filename), "output_cuda/frame_%04d.jpg", i);
+        snprintf(output_filename, sizeof(output_filename), "output/output_cuda/frame_%04d.jpg", i);
         save_image(output_filename, edges, w, h, 1);
         log_info("CUDA: Saved %s", output_filename);
 

@@ -137,7 +137,7 @@ void run_worker_cuda(int rank, int world_size) {
 
         // Save results
         char output_filename[MAX_FILENAME_LEN];
-        snprintf(output_filename, sizeof(output_filename), "output/frame_%04d.jpg", frame_num);
+        snprintf(output_filename, sizeof(output_filename), "output/output_mpi_cuda/frame_%04d.jpg", frame_num);
         save_image(output_filename, output_edges, w, h, 1);
         log_info("WORKER %d: Saved %s", rank, output_filename);
 
