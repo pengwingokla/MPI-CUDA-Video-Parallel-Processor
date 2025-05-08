@@ -92,7 +92,7 @@ void worker(int rank) {
         unsigned char* edges = malloc(w * h);
         simple_edge_filter(img, edges, w, h, c);
 
-        snprintf(output_filename, sizeof(output_filename), "output_mpi/frame_%04d.jpg", frame_num);
+        snprintf(output_filename, sizeof(output_filename), "output/output_mpi/frame_%04d.jpg", frame_num);
         save_image(output_filename, edges, w, h, 1);
         log_info("WORKER %d: Saved %s", rank, output_filename);
 
@@ -129,4 +129,3 @@ int main(int argc, char** argv) {
     MPI_Finalize();
     return 0;
 }
-

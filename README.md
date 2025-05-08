@@ -28,17 +28,28 @@ This setup is ideal for learning hybrid parallel programming that combines CPU t
 
 ## Project Structure
 
-`mpi-project`/ 
-<br>├── `main.c` # MPI entry point 
-<br>├── `master.c` # Master process: distributes tasks 
-<br>├── `worker.c` # Worker process: loads & processes frames 
-<br>├── `frame_io.c/h` # Handles image loading/saving (via stb) 
-<br>├── task_queue.c/h # Maintains list of image frames 
-<br>├── `cuda_filter.cu` # CUDA kernel for image inversion 
-<br>├── `extract_frames.py` # Python script to split video into frames 
-<br>├── output/ # Processed output frames 
-<br>├── frames/ # Input frames (from extract script) 
-<br>└── `Makefile`
+mpi-project/
+<br>├── src/
+<br>│   ├── main_serial.c         # Serial version
+<br>│   ├── main_cuda.cu          # CUDA-only
+<br>│   ├── main_mpi.c            # MPI-only
+<br>│   ├── main_mpi_cuda.cu      # MPI + CUDA
+<br>│   ├── master.c              # MPI master logic
+<br>│   ├── task_queue.c          # Simple task scheduler for MPI
+<br>│   ├── cuda_filter.cu        # Filtering kernels
+<br>│   ├── frame_io.c/h          # Image I/O
+<br>│   ├── utils.c/h             # Utility helpers
+<br>├── include/            
+<br>│   ├── cuda_filter.h
+<br>│   ├── frame_io.h
+<br>│   ├── task_queue.h
+<br>│   └── utils.h
+<br>├── frames/                  # Input frames
+<br>├── output/                  # Processed output
+<br>├── bash_scripts/            # Demo scripts
+<br>├── extract_frames.py        # Split video into frames
+<br>└── Makefile
+
 
 ---
 
@@ -76,22 +87,19 @@ Extract Video Frames
 ```
 python3 extract_frames.py input.mp4
 ```
-Build the Project
+Execution via Bash Scripts
 ```
-make
+chmod +x bash_scripts/v*.sh
+./bash_scripts/v1_serial.sh
+./bash_scripts/v2_cuda.sh
+./bash_scripts/v3_mpi.sh
+./bash_scripts/v4_mpi_cuda.sh
 ```
-Run the Project
-```
-mpirun --allow-run-as-root -np 4 ./classifier
-```
-Check if output frames match input frames
-```
-ls output/ | wc -l  # Should match number of input frames
-```
-Combine the processed frames to a video
-```
-ffmpeg -framerate 30 -i output/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p sobel_output.mp4
-```
+Each script:
+
+- Compiles the code.
+- Runs the version.
+- Uses ffmpeg to generate a video.
 
 ##  Build Instructions
 

@@ -37,7 +37,7 @@ int main() {
         unsigned char* edges = malloc(w * h);
         simple_edge_filter(img, edges, w, h, c);
 
-        snprintf(output_filename, sizeof(output_filename), "output_serial/frame_%04d.jpg", i);
+        snprintf(output_filename, sizeof(output_filename), "output/output_serial/frame_%04d.jpg", i);
         save_image(output_filename, edges, w, h, 1);
         log_info("SERIAL: Saved %s", output_filename);
 
