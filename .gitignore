@@ -3,7 +3,7 @@
 *.jpg
 
 # Ignore all files in this folder
-output/
+output/output_*
 frames/
 venv/
 segmentation/
