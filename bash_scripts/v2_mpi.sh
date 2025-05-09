@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 echo "==> CLEANING..."
@@ -8,7 +8,7 @@ echo "==> COMPILING MPI-ONLY VERSION..."
 make mpi_only
 
 echo "==> RUNNING MPI-ONLY VERSION..."
-mpirun -np 4 --allow-run-as-root \
+mpirun -np 4 \
     --output-filename output/output_mpi/logs ./exec_mpi_only
 
 # echo "==> CONVERTING FRAMES TO VIDEO..."

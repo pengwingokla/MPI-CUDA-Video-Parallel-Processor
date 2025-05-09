@@ -1,5 +1,4 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 set -e  # Exit on any error
 
 echo "==> COMPILING MPI+CUDA VERSION..."
@@ -7,7 +6,7 @@ make full
 
 echo "==> RUNNING MPI+CUDA VERSION..."
 # This will save output of each rank in output/output_mpi_cuda/rank.X/stdout and stderr
-mpirun -np 4 --allow-run-as-root \
+mpirun -np 4 \
     --output-filename output/output_mpi_cuda/logs ./exec_full
 
 echo "==> GENERATING VIDEO FROM PROCESSED FRAMES..."
