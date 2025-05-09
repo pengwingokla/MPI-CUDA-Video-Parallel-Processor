@@ -1,34 +1,38 @@
 { pkgs ? import <nixpkgs> {} }:
 
 let
-  pinnedPkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/refs/tags/23.11.tar.gz") {
-    config.allowUnfree = true;
-  };
-
-  cuda = pinnedPkgs.cudaPackages_12;
+  # A Python 3 environment with opencv-python available as `import cv2`
+  pythonEnv = pkgs.python3.withPackages (ps: with ps; [
+    ps.opencv-python    # OpenCV bindings for Python :contentReference[oaicite:6]{index=6}
+  ]);
 in
-pinnedPkgs.mkShell {
-  name = "mpi-cuda-dev-env";
 
-  buildInputs = with pinnedPkgs; [
-    openmpi
-    cuda.cudatoolkit
-    cuda.cuda_nvcc
-    gnumake
-    gcc
-    python3
-    python3Packages.numpy
-    opencv4
-    imagemagick
+pkgs.mkShell {
+  name = "mpi-cuda-video-dev";
+
+  buildInputs = [
+    pkgs.gcc             # C/C++ compiler
+    pkgs.gnumake         # GNU make
+    pkgs.openmpi         # mpicc, mpicxx, mpirun :contentReference[oaicite:7]{index=7}
+    pkgs.cudaPackages.cudatoolkit  # nvcc + CUDA runtime
+    pkgs.ffmpeg          # FFmpeg CLI for video/frame encoding :contentReference[oaicite:8]{index=8}
+    pythonEnv            # Python 3 interpreter with cv2 module
   ];
 
   shellHook = ''
-    export OMPI_CC=gcc
-    export OMPI_CXX=g++
-    export CUDA_PATH=${cuda.cudatoolkit}
-    export PATH=$CUDA_PATH/bin:$PATH
-    export LD_LIBRARY_PATH=$CUDA_PATH/lib64:${pinnedPkgs.openmpi}/lib:$LD_LIBRARY_PATH
-
-    echo "✅ Environment ready with CUDA $(nvcc --version | grep release) and MPI $(mpirun --version | head -1)"
+    echo "--- Nix Shell for MPI+CUDA Video Pipeline ---"
+    echo "C Compiler: $(gcc --version | head -n1)"
+    echo "MPI: $(mpicc --version | head -n1)"
+    echo "CUDA: $(nvcc --version | grep "release")"
+    echo "FFmpeg: $(ffmpeg -version | head -n1)"
+    echo "Python3: $(python3 --version)"
+    echo "  Modules: cv2 -> $(python3 -c "import cv2; print(cv2.__version__)")"
+    echo ""
+    echo "Now you can:"
+    echo "  • make -C src/v1_serial"
+    echo "  • mpirun -np 4 make -C src/v2_mpi_only/…/template"
+    echo "  • make -C src/v3_cuda_only && ./src/v3_cuda_only/template"
+    echo "  • mpirun -np 8 make -C src/v4_mpi_cuda && ./src/v4_mpi_cuda/template"
+    echo ""
   '';
 }

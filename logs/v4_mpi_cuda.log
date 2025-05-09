@@ -1,0 +1,15 @@
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+./exec/exec_full: error while loading shared libraries: libdl.so.2: cannot open shared object file: No such file or directory
+--------------------------------------------------------------------------
+prterun detected that one or more processes exited with non-zero status,
+thus causing the job to be terminated. The first process to do so was:
+
+   Process name: [prterun-laptopB-169329@1,0]
+   Exit code:    127
+--------------------------------------------------------------------------

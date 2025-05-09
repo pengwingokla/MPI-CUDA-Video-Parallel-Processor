@@ -1,0 +1,3 @@
+[ WARN:0@0.216] global cap_gstreamer.cpp:1436 open OpenCV | GStreamer warning: Error opening bin: unexpected reference "cappy" - ignoring
+[ WARN:0@0.216] global cap_gstreamer.cpp:1173 isPipelinePlaying OpenCV | GStreamer warning: GStreamer: pipeline have not been created
+Extracted 0 frames.

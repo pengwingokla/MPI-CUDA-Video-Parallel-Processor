@@ -1,0 +1,48 @@
+ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers
+  built with gcc 13.3.0 (GCC)
+  configuration: --disable-static --prefix=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1 --target_os=linux --arch=x86_64 --pkg-config=pkg-config --enable-gpl --enable-version3 --disable-nonfree --disable-static --enable-shared --enable-pic --disable-thumb --disable-small --enable-runtime-cpudetect --disable-gray --enable-swscale-alpha --enable-hardcoded-tables --enable-safe-bitstream-reader --enable-pthreads --disable-w32threads --disable-os2threads --enable-network --enable-pixelutils --datadir=/nix/store/bzq1w3bwfddlrgi10lksbz7wk0gxmf7p-ffmpeg-7.1-data/share/ffmpeg --enable-ffmpeg --enable-ffplay --enable-ffprobe --bindir=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1-bin/bin --enable-avcodec --enable-avdevice --enable-avfilter --enable-avformat --enable-avutil --enable-postproc --enable-swresample --enable-swscale --libdir=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1-lib/lib --incdir=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1-dev/include --enable-doc --enable-htmlpages --enable-manpages --mandir=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1-man/share/man --enable-podpages --enable-txtpages --docdir=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-ffmpeg-7.1-doc/share/doc/ffmpeg --enable-alsa --enable-amf --enable-libaom --disable-libaribb24 --disable-libaribcaption --enable-libass --disable-avisynth --disable-libbluray --disable-libbs2b --enable-bzlib --disable-libcaca --disable-libcdio --enable-libcelt --disable-chromaprint --disable-libcodec2 --disable-cuda --disable-cuda-llvm --disable-cuda-nvcc --enable-cuvid --enable-libdav1d --disable-libdc1394 --enable-libdrm --disable-libdvdnav --disable-libdvdread --disable-libfdk-aac --enable-ffnvcodec --disable-libflite --enable-fontconfig --enable-libfontconfig --enable-libfreetype --disable-frei0r --disable-libfribidi --disable-libgme --enable-gnutls --disable-libgsm --enable-libharfbuzz --enable-iconv --disable-libilbc --disable-libjack --disable-libjxl --disable-libkvazaar --disable-ladspa --disable-liblc3 --disable-liblcevc-dec --disable-lcms2 --enable-lzma --disable-metal --disable-libmfx --disable-libmodplug --enable-libmp3lame --disable-libmysofa --disable-libnpp --enable-nvdec --enable-nvenc --disable-openal --disable-opencl --disable-libopencore-amrnb --disable-libopencore-amrwb --disable-opengl --disable-libopenh264 --enable-libopenjpeg --disable-libopenmpt --enable-libopus --disable-libplacebo --enable-libpulse --disable-libqrencode --disable-libquirc --disable-librav1e --enable-librist --disable-librtmp --disable-librubberband --disable-libsmbclient --enable-sdl2 --disable-libshaderc --disable-libshine --disable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --disable-librsvg --enable-libsvtav1 --disable-libtensorflow --enable-libtheora --disable-libtwolame --enable-libv4l2 --enable-v4l2-m2m --enable-vaapi --enable-vdpau --disable-libvpl --enable-libvidstab --disable-libvmaf --disable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-vulkan --disable-libvvenc --enable-libwebp --enable-libx264 --enable-libx265 --disable-libxavs --disable-libxcb --disable-libxcb-shape --disable-libxcb-shm --disable-libxcb-xfixes --disable-libxevd --disable-libxeve --disable-xlib --disable-libxml2 --enable-libxvid --enable-libzimg --enable-zlib --disable-libzmq --disable-libzvbi --disable-debug --enable-optimizations --disable-extra-warnings --disable-stripping
+  libavutil      59. 39.100 / 59. 39.100
+  libavcodec     61. 19.100 / 61. 19.100
+  libavformat    61.  7.100 / 61.  7.100
+  libavdevice    61.  3.100 / 61.  3.100
+  libavfilter    10.  4.100 / 10.  4.100
+  libswscale      8.  3.100 /  8.  3.100
+  libswresample   5.  3.100 /  5.  3.100
+  libpostproc    58.  3.100 / 58.  3.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/home/myko/MPI-CUDA-Video-Parallel-Processor/panda.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41isomavc1
+    creation_time   : 2020-09-02T11:02:40.000000Z
+  Duration: 00:00:16.60, start: 0.000000, bitrate: 24366 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 3840x2160, 24201 kb/s, 23.98 fps, 23.98 tbr, 24k tbn (default)
+      Metadata:
+        creation_time   : 2020-09-02T11:02:40.000000Z
+        handler_name    : L-SMASH Video Handler
+        vendor_id       : [0][0][0][0]
+        encoder         : AVC Coding
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, mono, fltp, 157 kb/s (default)
+      Metadata:
+        creation_time   : 2020-09-02T11:02:40.000000Z
+        handler_name    : L-SMASH Audio Handler
+        vendor_id       : [0][0][0][0]
+Stream mapping:
+  Stream #0:0 -> #0:0 (h264 (native) -> mjpeg (native))
+Press [q] to stop, [?] for help
+Output #0, image2, to '/home/myko/MPI-CUDA-Video-Parallel-Processor/frames/frame_%04d.jpg':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41isomavc1
+    encoder         : Lavf61.7.100
+  Stream #0:0(und): Video: mjpeg, yuv420p(pc, bt709, progressive), 3840x2160, q=2-31, 200 kb/s, 23.98 fps, 23.98 tbn (default)
+      Metadata:
+        creation_time   : 2020-09-02T11:02:40.000000Z
+        handler_name    : L-SMASH Video Handler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.100 mjpeg
+      Side data:
+        cpb: bitrate max/min/avg: 0/0/200000 buffer size: 0 vbv_delay: N/A
+frame=    4 fps=0.0 q=16.7 size=N/A time=00:00:00.16 bitrate=N/A speed=0.331x    frame=   19 fps= 19 q=24.8 size=N/A time=00:00:00.79 bitrate=N/A speed=0.79x    frame=   34 fps= 23 q=24.8 size=N/A time=00:00:01.41 bitrate=N/A speed=0.943x    frame=   49 fps= 24 q=24.8 size=N/A time=00:00:02.04 bitrate=N/A speed=1.02x    frame=   64 fps= 26 q=24.8 size=N/A time=00:00:02.66 bitrate=N/A speed=1.07x    frame=   79 fps= 26 q=24.8 size=N/A time=00:00:03.29 bitrate=N/A speed= 1.1x    frame=   93 fps= 27 q=24.8 size=N/A time=00:00:03.87 bitrate=N/A speed=1.11x    frame=  107 fps= 27 q=24.8 size=N/A time=00:00:04.46 bitrate=N/A speed=1.11x    frame=  121 fps= 27 q=24.8 size=N/A time=00:00:05.04 bitrate=N/A speed=1.12x    frame=  134 fps= 27 q=24.8 size=N/A time=00:00:05.58 bitrate=N/A speed=1.12x    frame=  147 fps= 27 q=24.8 size=N/A time=00:00:06.13 bitrate=N/A speed=1.11x    frame=  161 fps= 27 q=24.8 size=N/A time=00:00:06.71 bitrate=N/A speed=1.12x    frame=  175 fps= 27 q=24.8 size=N/A time=00:00:07.29 bitrate=N/A speed=1.12x    frame=  188 fps= 27 q=24.8 size=N/A time=00:00:07.84 bitrate=N/A speed=1.12x    frame=  200 fps= 27 q=24.8 size=N/A time=00:00:08.34 bitrate=N/A speed=1.11x    frame=  211 fps= 26 q=24.8 size=N/A time=00:00:08.80 bitrate=N/A speed= 1.1x    frame=  222 fps= 26 q=24.8 size=N/A time=00:00:09.25 bitrate=N/A speed=1.09x    frame=  235 fps= 26 q=24.8 size=N/A time=00:00:09.80 bitrate=N/A speed=1.09x    frame=  248 fps= 26 q=24.8 size=N/A time=00:00:10.34 bitrate=N/A speed=1.09x    frame=  261 fps= 26 q=24.8 size=N/A time=00:00:10.88 bitrate=N/A speed=1.09x    frame=  274 fps= 26 q=24.8 size=N/A time=00:00:11.42 bitrate=N/A speed=1.09x    frame=  287 fps= 26 q=24.8 size=N/A time=00:00:11.97 bitrate=N/A speed=1.09x    frame=  299 fps= 26 q=24.8 size=N/A time=00:00:12.47 bitrate=N/A speed=1.08x    frame=  310 fps= 26 q=24.8 size=N/A time=00:00:12.92 bitrate=N/A speed=1.08x    frame=  321 fps= 26 q=24.8 size=N/A time=00:00:13.38 bitrate=N/A speed=1.07x    frame=  332 fps= 26 q=24.8 size=N/A time=00:00:13.84 bitrate=N/A speed=1.06x    frame=  345 fps= 26 q=24.8 size=N/A time=00:00:14.38 bitrate=N/A speed=1.07x    frame=  358 fps= 26 q=24.8 size=N/A time=00:00:14.93 bitrate=N/A speed=1.07x    frame=  371 fps= 26 q=24.8 size=N/A time=00:00:15.47 bitrate=N/A speed=1.07x    frame=  385 fps= 26 q=24.8 size=N/A time=00:00:16.05 bitrate=N/A speed=1.07x    [out#0/image2 @ 0x238e4540] video:159667KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+frame=  398 fps= 26 q=24.8 Lsize=N/A time=00:00:16.59 bitrate=N/A speed=1.07x    

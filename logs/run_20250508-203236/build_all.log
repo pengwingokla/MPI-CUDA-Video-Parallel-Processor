@@ -1,0 +1,1 @@
+nvcc -c src/cuda_filter.cu -o build/obj/cuda_filter.o -Iinclude
