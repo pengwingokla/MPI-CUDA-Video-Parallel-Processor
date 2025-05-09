@@ -9,8 +9,7 @@ pip install -r requirements.txt
 
 echo "==> EXTRACTING FRAMES..."
 python3 src/extract_frames.py
-mkdir output/
-mkdir output/output_cuda/
+mkdir -p output/output_cuda/
 
 echo "==> COMPILING CUDA-ONLY VERSION..."
 make cuda_only
