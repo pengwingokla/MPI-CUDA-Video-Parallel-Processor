@@ -1,110 +1,153 @@
 #!/usr/bin/env bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Define the list of files and directories provided.
+# In a real scenario, you might get this from a file or command output.
+# This script assumes it's running in the root directory where these paths are valid.
+FILE_ENTRIES=$(cat << 'EOF'
+bash_scripts
+bash_scripts/run_full_cluster.sh
+bash_scripts/v1_serial.sh
+bash_scripts/v2_mpi.sh
+bash_scripts/v3_cuda.sh
+bash_scripts/v4_full.sh
+build/obj
+build/obj/cuda_filter.o
+build/obj/frame_io_serial.o
+build/obj/frame_io.o
+build/obj/main_cuda.o
+build/obj/main_mpi_cuda.o
+build/obj/main_serial.o
+build/obj/master.o
+build/obj/task_queue.o
+build/obj/utils_serial.o
+build/obj/utils.o
+build/obj/worker_cuda.o
+exec
+exec/exec_cuda_only
+exec/exec_full
+exec/exec_mpi_only
+exec/exec_serial
+frames
+include
+include/cuda_filter.h
+include/cuda_segmentation.h
+include/frame_io.h
+include/stb_image_write.h
+include/stb_image.h
+include/task_queue.h
+include/utils.h
+logs
+output
+output/output_mpi
+output/output_mpi_cuda
+src
+src/cuda_filter.cu
+src/extract_frames.py
+src/frame_io_serial.c
+src/frame_io.c
+src/main_cuda.c
+src/main_mpi_cuda.c
+src/main_mpi.c
+src/main_serial.c
+src/master.c
+src/task_queue.c
+src/utils.c
+src/worker_cuda.c
+venv
+.gitignore
+cappy.mp4
+cappy.mp4:Zone.Identifier
+CLEANING...
+COMPILING
+cuda_filter.o
+exec_cuda
+exec_cuda_only
+exec_full
+exec_serial
+frame_io.o
+main_mpi_cuda.o
+Makefile
+master.o
+myhost.txt
+output_serial.mp4
+panda.mp4:Zone.Identifier
+project_setup.sh
+project_snapshot.txt
+QUICKSTART.md
+README.md
+requirements.txt
+run_all.sh
+scrape_project.sh
+shell.nix
+SIMPLE_INSTRUCTION.md
+task_queue.o
+test_segment
+test_segment_label
+test_segment.o
+utils.o
+worker_cuda.o
+EOF
+)
 
-echo ""
-echo "--- MPI-CUDA Video Project Setup Script ---"
+MAX_LINES=250
 
-# --- Python Virtual Environment Setup ---
-VENV_DIR="venv"
+echo "$FILE_ENTRIES" | while IFS= read -r entry; do
+    # Trim potential leading/trailing whitespace from the entry
+    entry=$(echo "$entry" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-echo "[PYTHON] Ensuring a clean virtual environment '$VENV_DIR' with --system-site-packages..."
-# Force removal of existing venv to ensure it's created fresh with current settings.
-# This is important if the old venv was created without --system-site-packages
-# or if Python version in Nix changed.
-if [ -d "$VENV_DIR" ]; then
-  echo "[PYTHON] Removing existing virtual environment '$VENV_DIR'..."
-  rm -rf "$VENV_DIR"
-fi
-
-echo "[PYTHON] Creating Python virtual environment '$VENV_DIR' with --system-site-packages..."
-# Using the python3 from the Nix shell.
-# --system-site-packages allows the venv to access packages already installed
-# in the Nix environment's Python (like numpy, opencv, pyparsing from shell.nix).
-python3 -m venv "$VENV_DIR" --system-site-packages
-echo "[PYTHON] Virtual environment created."
-
-
-echo "[PYTHON] Activating virtual environment..."
-source "$VENV_DIR/bin/activate"
-echo "[PYTHON] Python interpreter in venv: $(which python3)"
-echo "[PYTHON] Python version in venv: $(python3 --version)"
-
-echo "[PYTHON] Checking access to Nix-provided packages within activated venv..."
-# Give a moment for activation to fully settle in some environments, then check
-sleep 1
-echo "  cv2 version: $(python3 -c "import cv2; print(cv2.__version__)" 2>&1 || echo 'cv2: Not found or import error in venv')"
-echo "  numpy version: $(python3 -c "import numpy; print(numpy.__version__)" 2>&1 || echo 'numpy: Not found or import error in venv')"
-echo "  pyparsing version: $(python3 -c "import pyparsing; print(pyparsing.__version__)" 2>&1 || echo 'pyparsing: Not found or import error in venv')"
-
-
-echo "[PYTHON] Upgrading pip in venv..."
-pip install --upgrade pip
-
-# Install requirements from requirements.txt if it exists
-if [ -f "requirements.txt" ]; then
-  echo "[PYTHON] Installing packages from requirements.txt..."
-  echo "         Reminder: 'numpy', 'opencv-python', and 'pyparsing' should ideally be"
-  echo "         REMOVED from requirements.txt to use the stable Nix-provided versions."
-  pip install -r requirements.txt
-else
-  echo "[PYTHON] requirements.txt not found. Skipping 'pip install -r requirements.txt'."
-fi
-
-# Specifically for the 'latest' package, if not handled by requirements.txt
-# pyparsing (its build dependency) should be available from system-site-packages.
-if python3 -c "import latest" &> /dev/null; then
-    echo "[PYTHON] 'latest' package is already installed or accessible."
-else
-    # Check if pyparsing is truly accessible before trying to install 'latest'
-    if python3 -c "import pyparsing" &> /dev/null; then
-        echo "[PYTHON] 'pyparsing' is accessible. Attempting to install 'latest' package..."
-        pip install latest
-        echo "[PYTHON] 'latest' package installation attempted."
-    else
-        echo "[PYTHON] ERROR: 'pyparsing' is NOT accessible in the venv. Cannot reliably build 'latest'."
-        echo "         Please ensure 'pyparsing' is in 'pythonBasePackages' in your shell.nix and "
-        echo "         that the venv was created correctly with --system-site-packages."
+    # Skip if entry is empty after trimming
+    if [ -z "$entry" ]; then
+        continue
     fi
-fi
-echo "[PYTHON] Python environment setup complete."
 
-# --- Project Structure Setup ---
-FRAMES_DIR="frames"
-OUTPUT_DIR="output"
-BASH_SCRIPTS_DIR="bash_scripts"
+    # 1. Check if it's an actual file on the filesystem
+    #    This will filter out directory names like 'src', 'include', 'build/obj'
+    #    and also placeholder text like 'CLEANING...', 'COMPILING'
+    if [ ! -f "$entry" ]; then
+        # For debugging: echo "Skipping non-file or non-existent: $entry" >&2
+        continue
+    fi
 
-echo "[PROJECT] Ensuring directory structure..."
-mkdir -p "$FRAMES_DIR"
-mkdir -p "$OUTPUT_DIR"
-echo "[PROJECT] '$FRAMES_DIR' and '$OUTPUT_DIR' directories ensured."
+    # 2. Exclude specific directories, file types, and individual files
+    #    we know are not relevant source code.
+    if [[ "$entry" == build/obj/* ]] || \
+       [[ "$entry" == exec/* ]] || \
+       [[ "$entry" == *.o ]] || \
+       [[ "$entry" == *.mp4 ]] || \
+       [[ "$entry" == *.mp4:Zone.Identifier ]] || \
+       [[ "$entry" == *.txt ]] || \
+       [[ "$entry" == *.md ]] || \
+       [[ "$entry" == ".gitignore" ]] || \
+       [[ "$entry" == "shell.nix" ]] || \
+       [[ "$entry" == "cappy.mp4:Zone.Identifier" ]] || \
+       [[ "$entry" == "panda.mp4:Zone.Identifier" ]]; then
+        # For debugging: echo "Skipping excluded pattern: $entry" >&2
+        continue
+    fi
 
-if [ -d "$BASH_SCRIPTS_DIR" ]; then
-  echo "[PROJECT] Making bash scripts in '$BASH_SCRIPTS_DIR/' executable..."
-  chmod +x "$BASH_SCRIPTS_DIR"/*.sh
-  echo "[PROJECT] Bash scripts are now executable."
-else
-  echo "[WARN] '$BASH_SCRIPTS_DIR' directory not found. Cannot make scripts executable."
-fi
+    # 3. Identify relevant source code files by extension or specific name
+    is_source_code=false
+    case "$entry" in
+        *.c|*.h|*.cu|*.py|*.sh) # Common source/script extensions
+            is_source_code=true
+            ;;
+        Makefile) # Specific filename
+            is_source_code=true
+            ;;
+        # Add other relevant extensions if needed, e.g., *.cpp, *.java, *.js
+        *)
+            # For debugging: echo "Skipping non-source extension: $entry" >&2
+            ;;
+    esac
 
-# --- Video File Check ---
-VIDEO_FILE_CANDIDATE=$(find . -maxdepth 1 -iname "*.mp4" -print -quit 2>/dev/null)
-if [ -n "$VIDEO_FILE_CANDIDATE" ]; then
-    echo "[PROJECT] Found a video file: '$VIDEO_FILE_CANDIDATE'."
-    echo "          Please ensure your 'src/extract_frames.py' script is configured to use your desired input video."
-else
-    echo "[WARN] No .mp4 video found in the project root. Make sure to add your video file"
-    echo "         and update 'src/extract_frames.py' if necessary before extracting frames."
-fi
+    if [ "$is_source_code" = true ]; then
+        echo "--- START FILE: $entry ---"
+        # Use head to get up to MAX_LINES.
+        # If file has fewer lines, head will just output all of them.
+        head -n "$MAX_LINES" "$entry"
+        echo "--- END FILE: $entry ---"
+        echo "" # Add a blank line for better readability between files
+    fi
+done
 
-echo ""
-echo "--- Setup Script Finished ---"
-echo "What to do next:"
-echo "1. CRITICAL: Ensure 'numpy', 'opencv-python', and 'pyparsing' are NOT in 'requirements.txt'."
-echo "2. If not already done, add your MP4 video to the project."
-echo "3. Ensure 'src/extract_frames.py' points to your video file."
-echo "4. The venv ('$VENV_DIR') should be active. If you open a new shell, re-enter nix-shell then 'source $VENV_DIR/bin/activate'."
-echo "5. Extract frames: python3 src/extract_frames.py"
-echo "6. Compile and run your project using the scripts in '$BASH_SCRIPTS_DIR/'."
-echo ""
+echo "Scraping complete."

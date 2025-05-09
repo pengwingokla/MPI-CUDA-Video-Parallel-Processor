@@ -1,0 +1,36 @@
+Friend's Project: Multi-Machine Full Suite Test Orchestration Log - Session: friends_multirun_20250509_141252_nixos
+[2025-05-09 14:12:52] Starting Friend's Project Full Suite Test Script...
+[2025-05-09 14:12:52] Session ID: friends_multirun_20250509_141252_nixos
+[2025-05-09 14:12:52] Logging to Directory: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_141252_nixos
+[2025-05-09 14:12:52] Project Root (Friend's): /home/myko/MPI-CUDA-Video-Parallel-Processor
+[2025-05-09 14:12:52] Target hosts configured:
+[2025-05-09 14:12:52]   - myko@192.168.1.158 50
+[2025-05-09 14:12:52]   - myko@192.168.1.97 50
+[2025-05-09 14:12:52] --- Running Initial Cluster-Wide Setup for Friend's Project ---
+[2025-05-09 14:12:52] --- Phase 1: SSH Setup ---
+[2025-05-09 14:12:52] Checking SSH to myko@192.168.1.158 from myko@192.168.1.158...
+[2025-05-09 14:12:53] SUCCESS: Passwordless SSH to myko@192.168.1.158.
+[2025-05-09 14:12:53] Checking SSH to myko@192.168.1.97 from myko@192.168.1.158...
+[2025-05-09 14:12:53] SUCCESS: Passwordless SSH to myko@192.168.1.97.
+[2025-05-09 14:12:53] --- SSH Setup Phase Completed ---
+[2025-05-09 14:12:53] Combined CUDA arch flags for builds: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 
+[2025-05-09 14:12:53] --- Preparing Input Frames (on master node) ---
+[2025-05-09 14:12:53] Found video cappy.mp4. Extracting frames using src/extract_frames.py...
+[2025-05-09 14:13:45] Frame extraction complete.
+[2025-05-09 14:13:45] --- Syncing Project Root to Worker Nodes (initial sync before builds) ---
+[2025-05-09 14:13:45] Initial sync of /home/myko/MPI-CUDA-Video-Parallel-Processor/ to myko@192.168.1.97:/home/myko/MPI-CUDA-Video-Parallel-Processor/
+[2025-05-09 14:13:45]   Executing rsync (Log: rsync_initial_to_192.168.1.97.log)...
+[2025-05-09 14:13:47] SUCCESS: Initial sync to myko@192.168.1.97.
+[2025-05-09 14:13:47] --- Initial Sync Phase Completed ---
+[2025-05-09 14:13:47] --- Creating MPI Hostfile ---
+[2025-05-09 14:13:47] MPI Hostfile: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_141252_nixos/mpi_cluster_hosts.txt
+192.168.1.158 slots=1
+192.168.1.97 slots=1
+[2025-05-09 14:13:47] --- MPI Hostfile Creation Phase Completed ---
+[2025-05-09 14:13:47] --- Initial Cluster-Wide Setup Completed ---
+[2025-05-09 14:13:47] --- Starting Friend's Project Test Suite ---
+[2025-05-09 14:13:47] === Testing Serial (NP=1) ===
+[2025-05-09 14:13:47] -- Building Target: serial (Executable: exec_serial) --
+[2025-05-09 14:13:47]   Attempting to remove old executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_serial
+[2025-05-09 14:13:47]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' serial (Log: friends_multirun_20250509_141252_nixos/make_serial.log)
+[2025-05-09 14:13:47]     Build Status for exec_serial: Build OK, but exec_serial MISSING

@@ -1,0 +1,19 @@
+Friend's Project: Multi-Machine Full Suite Test Orchestration Log - Session: friends_multirun_20250509_140743_nixos
+[2025-05-09 14:07:43] Starting Friend's Project Full Suite Test Script...
+[2025-05-09 14:07:43] Session ID: friends_multirun_20250509_140743_nixos
+[2025-05-09 14:07:43] Logging to Directory: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_140743_nixos
+[2025-05-09 14:07:43] Project Root (Friend's): /home/myko/MPI-CUDA-Video-Parallel-Processor
+[2025-05-09 14:07:43] Target hosts configured:
+[2025-05-09 14:07:43]   - myko@192.168.1.158 50
+[2025-05-09 14:07:43]   - myko@192.168.1.97 50
+[2025-05-09 14:07:43] --- Running Initial Cluster-Wide Setup for Friend's Project ---
+[2025-05-09 14:07:43] --- Phase 1: SSH Setup ---
+[2025-05-09 14:07:43] Checking SSH to myko@192.168.1.158 from myko@192.168.1.158...
+[2025-05-09 14:07:44] SUCCESS: Passwordless SSH to myko@192.168.1.158.
+[2025-05-09 14:07:44] Checking SSH to myko@192.168.1.97 from myko@192.168.1.158...
+[2025-05-09 14:07:44] SUCCESS: Passwordless SSH to myko@192.168.1.97.
+[2025-05-09 14:07:44] --- SSH Setup Phase Completed ---
+[2025-05-09 14:07:44] Combined CUDA arch flags for builds: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 
+[2025-05-09 14:07:44] --- Preparing Input Frames (on master node) ---
+[2025-05-09 14:07:44] Found video cappy.mp4. Extracting frames using src/extract_frames.py...
+[2025-05-09 14:07:44] ERROR: Frame extraction script failed. Ensure Python env is set up and cappy.mp4 exists.

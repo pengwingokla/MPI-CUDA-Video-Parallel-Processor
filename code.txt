@@ -1,0 +1,2158 @@
+--- START FILE: bash_scripts/run_full_cluster.sh ---
+#!/bin/bash
+set -e
+
+echo "==> COMPILING MPI+CUDA VERSION ON MASTER NODE..."
+make full
+
+echo "==> COPYING EXECUTABLE AND FRAMES TO WORKER NODE..."
+scp -r ./exec_full ./frames include src utils.c frame_io.c cuda_filter.c task_queue.c user@node2:~/MPI-CUDA-Video-Parallel-Processor/
+
+echo "==> RUNNING ON CLUSTER USING HOSTFILE..."
+mpirun --hostfile my_hosts.txt --allow-run-as-root ./exec_full
+
+echo "==> CONVERTING OUTPUT TO VIDEO..."
+ffmpeg -y -framerate 30 -i output/output_mpi_cuda/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_mpi_cuda.mp4
+--- END FILE: bash_scripts/run_full_cluster.sh ---
+
+--- START FILE: bash_scripts/v1_serial.sh ---
+#!/usr/bin/env bash
+
+set -e  # Stop on first error
+
+echo "==> CLEANING..."
+make clean
+
+echo "==> COMPILING SERIAL VERSION..."
+make serial
+
+echo "==> RUNNING SERIAL VERSION..."
+./exec_serial
+
+echo "==> CONVERTING FRAMES TO VIDEO..."
+ffmpeg -y -framerate 10 -i output/output_serial/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_serial.mp4
+--- END FILE: bash_scripts/v1_serial.sh ---
+
+--- START FILE: bash_scripts/v2_mpi.sh ---
+#!/usr/bin/env bash
+set -e
+
+echo "==> CLEANING..."
+make clean
+
+echo "==> COMPILING MPI-ONLY VERSION..."
+make mpi_only
+
+echo "==> RUNNING MPI-ONLY VERSION..."
+mpirun -np 4 \
+    --output-filename output/output_mpi/logs ./exec_mpi_only
+
+# echo "==> CONVERTING FRAMES TO VIDEO..."
+# ffmpeg -y -framerate 30 -i output/output_mpi/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_mpi_only.mp4
+--- END FILE: bash_scripts/v2_mpi.sh ---
+
+--- START FILE: bash_scripts/v3_cuda.sh ---
+#!/usr/bin/env bash
+
+set -e
+
+echo "==> COMPILING CUDA-ONLY VERSION..."
+make cuda_only
+
+echo "==> RUNNING CUDA-ONLY VERSION..."
+./exec_cuda_only
+
+echo "==> GENERATING VIDEO FROM FRAMES..."
+ffmpeg -y -framerate 30 -i output/output_cuda/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_cuda.mp4
+--- END FILE: bash_scripts/v3_cuda.sh ---
+
+--- START FILE: bash_scripts/v4_full.sh ---
+#!/usr/bin/env bash
+set -e  # Exit on any error
+
+echo "==> COMPILING MPI+CUDA VERSION..."
+make full
+
+echo "==> RUNNING MPI+CUDA VERSION..."
+# This will save output of each rank in output/output_mpi_cuda/rank.X/stdout and stderr
+mpirun -np 4 \
+    --output-filename output/output_mpi_cuda/logs ./exec_full
+
+echo "==> GENERATING VIDEO FROM PROCESSED FRAMES..."
+ffmpeg -y -framerate 30 -i output/output_mpi_cuda/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 23 output_mpi_cuda.mp4
+--- END FILE: bash_scripts/v4_full.sh ---
+
+--- START FILE: include/cuda_filter.h ---
+#ifndef CUDA_FILTER_H
+#define CUDA_FILTER_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// -------------------- Host-callable APIs --------------------
+
+// Main Canny edge detection
+void cuda_canny(unsigned char* input, unsigned char* output,
+    int width, int height, int channels,
+    unsigned char* prev_edge);
+
+// Grayscale threshold segmentation
+void cuda_segment(unsigned char* input, unsigned char* output_mask, int w, int h, int c, unsigned char threshold);
+
+// Connected Components
+void cuda_connected_components(unsigned char* binary_input, int* host_labels, int width, int height);
+
+// Segmentation + Labeling
+void cuda_segment_and_label(unsigned char* input, int* output_labels, int width, int height, int channels, unsigned char threshold);
+
+// Debug version: also returns intermediate mask
+void cuda_segment_and_label_debug(unsigned char* input, int* output_labels,
+    unsigned char* host_mask_out,
+    int width, int height, int channels, unsigned char threshold);
+
+
+// -------------------- Device Kernel Declarations --------------------
+// __global__ void rgb_to_gray_kernel(unsigned char* input, unsigned char* gray, int width, int height, int channels);
+// __global__ void segment_threshold_kernel(unsigned char* input, unsigned char* mask, int width, int height, int threshold);
+// __global__ void cc_label_kernel(unsigned char* binary, int* labels, int width, int height);
+// __global__ void cc_propagate_kernel(int* labels, int width, int height);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // CUDA_FILTER_H
+--- END FILE: include/cuda_filter.h ---
+
+--- START FILE: include/cuda_segmentation.h ---
+#ifndef CUDA_SEGMENTATION_H
+#define CUDA_SEGMENTATION_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void cuda_segment_and_label(
+    unsigned char* input, int* output_labels,
+    int width, int height, int channels, unsigned char threshold
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // CUDA_SEGMENTATION_H
+--- END FILE: include/cuda_segmentation.h ---
+
+--- START FILE: include/frame_io.h ---
+#ifndef FRAME_IO_H
+#define FRAME_IO_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+unsigned char* load_image(const char* filename, int* width, int* height, int* channels);
+void save_image(const char* filename, const unsigned char* data, int width, int height, int channels);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // FRAME_IO_H--- END FILE: include/frame_io.h ---
+
+--- START FILE: include/stb_image_write.h ---
+/* stb_image_write - v1.16 - public domain - http://nothings.org/stb
+   writes out PNG/BMP/TGA/JPEG/HDR images to C stdio - Sean Barrett 2010-2015
+                                     no warranty implied; use at your own risk
+
+   Before #including,
+
+       #define STB_IMAGE_WRITE_IMPLEMENTATION
+
+   in the file that you want to have the implementation.
+
+   Will probably not work correctly with strict-aliasing optimizations.
+
+ABOUT:
+
+   This header file is a library for writing images to C stdio or a callback.
+
+   The PNG output is not optimal; it is 20-50% larger than the file
+   written by a decent optimizing implementation; though providing a custom
+   zlib compress function (see STBIW_ZLIB_COMPRESS) can mitigate that.
+   This library is designed for source code compactness and simplicity,
+   not optimal image file size or run-time performance.
+
+BUILDING:
+
+   You can #define STBIW_ASSERT(x) before the #include to avoid using assert.h.
+   You can #define STBIW_MALLOC(), STBIW_REALLOC(), and STBIW_FREE() to replace
+   malloc,realloc,free.
+   You can #define STBIW_MEMMOVE() to replace memmove()
+   You can #define STBIW_ZLIB_COMPRESS to use a custom zlib-style compress function
+   for PNG compression (instead of the builtin one), it must have the following signature:
+   unsigned char * my_compress(unsigned char *data, int data_len, int *out_len, int quality);
+   The returned data will be freed with STBIW_FREE() (free() by default),
+   so it must be heap allocated with STBIW_MALLOC() (malloc() by default),
+
+UNICODE:
+
+   If compiling for Windows and you wish to use Unicode filenames, compile
+   with
+       #define STBIW_WINDOWS_UTF8
+   and pass utf8-encoded filenames. Call stbiw_convert_wchar_to_utf8 to convert
+   Windows wchar_t filenames to utf8.
+
+USAGE:
+
+   There are five functions, one for each image file format:
+
+     int stbi_write_png(char const *filename, int w, int h, int comp, const void *data, int stride_in_bytes);
+     int stbi_write_bmp(char const *filename, int w, int h, int comp, const void *data);
+     int stbi_write_tga(char const *filename, int w, int h, int comp, const void *data);
+     int stbi_write_jpg(char const *filename, int w, int h, int comp, const void *data, int quality);
+     int stbi_write_hdr(char const *filename, int w, int h, int comp, const float *data);
+
+     void stbi_flip_vertically_on_write(int flag); // flag is non-zero to flip data vertically
+
+   There are also five equivalent functions that use an arbitrary write function. You are
+   expected to open/close your file-equivalent before and after calling these:
+
+     int stbi_write_png_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data, int stride_in_bytes);
+     int stbi_write_bmp_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data);
+     int stbi_write_tga_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data);
+     int stbi_write_hdr_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const float *data);
+     int stbi_write_jpg_to_func(stbi_write_func *func, void *context, int x, int y, int comp, const void *data, int quality);
+
+   where the callback is:
+      void stbi_write_func(void *context, void *data, int size);
+
+   You can configure it with these global variables:
+      int stbi_write_tga_with_rle;             // defaults to true; set to 0 to disable RLE
+      int stbi_write_png_compression_level;    // defaults to 8; set to higher for more compression
+      int stbi_write_force_png_filter;         // defaults to -1; set to 0..5 to force a filter mode
+
+
+   You can define STBI_WRITE_NO_STDIO to disable the file variant of these
+   functions, so the library will not use stdio.h at all. However, this will
+   also disable HDR writing, because it requires stdio for formatted output.
+
+   Each function returns 0 on failure and non-0 on success.
+
+   The functions create an image file defined by the parameters. The image
+   is a rectangle of pixels stored from left-to-right, top-to-bottom.
+   Each pixel contains 'comp' channels of data stored interleaved with 8-bits
+   per channel, in the following order: 1=Y, 2=YA, 3=RGB, 4=RGBA. (Y is
+   monochrome color.) The rectangle is 'w' pixels wide and 'h' pixels tall.
+   The *data pointer points to the first byte of the top-left-most pixel.
+   For PNG, "stride_in_bytes" is the distance in bytes from the first byte of
+   a row of pixels to the first byte of the next row of pixels.
+
+   PNG creates output files with the same number of components as the input.
+   The BMP format expands Y to RGB in the file format and does not
+   output alpha.
+
+   PNG supports writing rectangles of data even when the bytes storing rows of
+   data are not consecutive in memory (e.g. sub-rectangles of a larger image),
+   by supplying the stride between the beginning of adjacent rows. The other
+   formats do not. (Thus you cannot write a native-format BMP through the BMP
+   writer, both because it is in BGR order and because it may have padding
+   at the end of the line.)
+
+   PNG allows you to set the deflate compression level by setting the global
+   variable 'stbi_write_png_compression_level' (it defaults to 8).
+
+   HDR expects linear float data. Since the format is always 32-bit rgb(e)
+   data, alpha (if provided) is discarded, and for monochrome data it is
+   replicated across all three channels.
+
+   TGA supports RLE or non-RLE compressed data. To use non-RLE-compressed
+   data, set the global variable 'stbi_write_tga_with_rle' to 0.
+
+   JPEG does ignore alpha channels in input data; quality is between 1 and 100.
+   Higher quality looks better but results in a bigger image.
+   JPEG baseline (no JPEG progressive).
+
+CREDITS:
+
+
+   Sean Barrett           -    PNG/BMP/TGA
+   Baldur Karlsson        -    HDR
+   Jean-Sebastien Guay    -    TGA monochrome
+   Tim Kelsey             -    misc enhancements
+   Alan Hickman           -    TGA RLE
+   Emmanuel Julien        -    initial file IO callback implementation
+   Jon Olick              -    original jo_jpeg.cpp code
+   Daniel Gibson          -    integrate JPEG, allow external zlib
+   Aarni Koskela          -    allow choosing PNG filter
+
+   bugfixes:
+      github:Chribba
+      Guillaume Chereau
+      github:jry2
+      github:romigrou
+      Sergio Gonzalez
+      Jonas Karlsson
+      Filip Wasil
+      Thatcher Ulrich
+      github:poppolopoppo
+      Patrick Boettcher
+      github:xeekworx
+      Cap Petschulat
+      Simon Rodriguez
+      Ivan Tikhonov
+      github:ignotion
+      Adam Schackart
+      Andrew Kensler
+
+LICENSE
+
+  See end of file for license information.
+
+*/
+
+#ifndef INCLUDE_STB_IMAGE_WRITE_H
+#define INCLUDE_STB_IMAGE_WRITE_H
+
+#include <stdlib.h>
+
+// if STB_IMAGE_WRITE_STATIC causes problems, try defining STBIWDEF to 'inline' or 'static inline'
+#ifndef STBIWDEF
+#ifdef STB_IMAGE_WRITE_STATIC
+#define STBIWDEF  static
+#else
+#ifdef __cplusplus
+#define STBIWDEF  extern "C"
+#else
+#define STBIWDEF  extern
+#endif
+#endif
+#endif
+
+#ifndef STB_IMAGE_WRITE_STATIC  // C++ forbids static forward declarations
+STBIWDEF int stbi_write_tga_with_rle;
+STBIWDEF int stbi_write_png_compression_level;
+STBIWDEF int stbi_write_force_png_filter;
+#endif
+
+#ifndef STBI_WRITE_NO_STDIO
+STBIWDEF int stbi_write_png(char const *filename, int w, int h, int comp, const void  *data, int stride_in_bytes);
+STBIWDEF int stbi_write_bmp(char const *filename, int w, int h, int comp, const void  *data);
+STBIWDEF int stbi_write_tga(char const *filename, int w, int h, int comp, const void  *data);
+STBIWDEF int stbi_write_hdr(char const *filename, int w, int h, int comp, const float *data);
+STBIWDEF int stbi_write_jpg(char const *filename, int x, int y, int comp, const void  *data, int quality);
+
+#ifdef STBIW_WINDOWS_UTF8
+STBIWDEF int stbiw_convert_wchar_to_utf8(char *buffer, size_t bufferlen, const wchar_t* input);
+#endif
+#endif
+
+typedef void stbi_write_func(void *context, void *data, int size);
+
+STBIWDEF int stbi_write_png_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data, int stride_in_bytes);
+STBIWDEF int stbi_write_bmp_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data);
+STBIWDEF int stbi_write_tga_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const void  *data);
+STBIWDEF int stbi_write_hdr_to_func(stbi_write_func *func, void *context, int w, int h, int comp, const float *data);
+STBIWDEF int stbi_write_jpg_to_func(stbi_write_func *func, void *context, int x, int y, int comp, const void  *data, int quality);
+
+STBIWDEF void stbi_flip_vertically_on_write(int flip_boolean);
+
+#endif//INCLUDE_STB_IMAGE_WRITE_H
+
+#ifdef STB_IMAGE_WRITE_IMPLEMENTATION
+
+#ifdef _WIN32
+   #ifndef _CRT_SECURE_NO_WARNINGS
+   #define _CRT_SECURE_NO_WARNINGS
+   #endif
+   #ifndef _CRT_NONSTDC_NO_DEPRECATE
+   #define _CRT_NONSTDC_NO_DEPRECATE
+   #endif
+#endif
+
+#ifndef STBI_WRITE_NO_STDIO
+#include <stdio.h>
+#endif // STBI_WRITE_NO_STDIO
+
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#if defined(STBIW_MALLOC) && defined(STBIW_FREE) && (defined(STBIW_REALLOC) || defined(STBIW_REALLOC_SIZED))
+// ok
+#elif !defined(STBIW_MALLOC) && !defined(STBIW_FREE) && !defined(STBIW_REALLOC) && !defined(STBIW_REALLOC_SIZED)
+// ok
+#else
+#error "Must define all or none of STBIW_MALLOC, STBIW_FREE, and STBIW_REALLOC (or STBIW_REALLOC_SIZED)."
+#endif
+
+#ifndef STBIW_MALLOC
+#define STBIW_MALLOC(sz)        malloc(sz)
+#define STBIW_REALLOC(p,newsz)  realloc(p,newsz)
+#define STBIW_FREE(p)           free(p)
+#endif
+
+#ifndef STBIW_REALLOC_SIZED
+#define STBIW_REALLOC_SIZED(p,oldsz,newsz) STBIW_REALLOC(p,newsz)
+#endif
+
+
+#ifndef STBIW_MEMMOVE
+#define STBIW_MEMMOVE(a,b,sz) memmove(a,b,sz)
+#endif
+
+
+#ifndef STBIW_ASSERT
+#include <assert.h>
+#define STBIW_ASSERT(x) assert(x)
+#endif
+
+#define STBIW_UCHAR(x) (unsigned char) ((x) & 0xff)
+
+#ifdef STB_IMAGE_WRITE_STATIC
+--- END FILE: include/stb_image_write.h ---
+
+--- START FILE: include/stb_image.h ---
+/* stb_image - v2.30 - public domain image loader - http://nothings.org/stb
+                                  no warranty implied; use at your own risk
+
+   Do this:
+      #define STB_IMAGE_IMPLEMENTATION
+   before you include this file in *one* C or C++ file to create the implementation.
+
+   // i.e. it should look like this:
+   #include ...
+   #include ...
+   #include ...
+   #define STB_IMAGE_IMPLEMENTATION
+   #include "stb_image.h"
+
+   You can #define STBI_ASSERT(x) before the #include to avoid using assert.h.
+   And #define STBI_MALLOC, STBI_REALLOC, and STBI_FREE to avoid using malloc,realloc,free
+
+
+   QUICK NOTES:
+      Primarily of interest to game developers and other people who can
+          avoid problematic images and only need the trivial interface
+
+      JPEG baseline & progressive (12 bpc/arithmetic not supported, same as stock IJG lib)
+      PNG 1/2/4/8/16-bit-per-channel
+
+      TGA (not sure what subset, if a subset)
+      BMP non-1bpp, non-RLE
+      PSD (composited view only, no extra channels, 8/16 bit-per-channel)
+
+      GIF (*comp always reports as 4-channel)
+      HDR (radiance rgbE format)
+      PIC (Softimage PIC)
+      PNM (PPM and PGM binary only)
+
+      Animated GIF still needs a proper API, but here's one way to do it:
+          http://gist.github.com/urraka/685d9a6340b26b830d49
+
+      - decode from memory or through FILE (define STBI_NO_STDIO to remove code)
+      - decode from arbitrary I/O callbacks
+      - SIMD acceleration on x86/x64 (SSE2) and ARM (NEON)
+
+   Full documentation under "DOCUMENTATION" below.
+
+
+LICENSE
+
+  See end of file for license information.
+
+RECENT REVISION HISTORY:
+
+      2.30  (2024-05-31) avoid erroneous gcc warning
+      2.29  (2023-05-xx) optimizations
+      2.28  (2023-01-29) many error fixes, security errors, just tons of stuff
+      2.27  (2021-07-11) document stbi_info better, 16-bit PNM support, bug fixes
+      2.26  (2020-07-13) many minor fixes
+      2.25  (2020-02-02) fix warnings
+      2.24  (2020-02-02) fix warnings; thread-local failure_reason and flip_vertically
+      2.23  (2019-08-11) fix clang static analysis warning
+      2.22  (2019-03-04) gif fixes, fix warnings
+      2.21  (2019-02-25) fix typo in comment
+      2.20  (2019-02-07) support utf8 filenames in Windows; fix warnings and platform ifdefs
+      2.19  (2018-02-11) fix warning
+      2.18  (2018-01-30) fix warnings
+      2.17  (2018-01-29) bugfix, 1-bit BMP, 16-bitness query, fix warnings
+      2.16  (2017-07-23) all functions have 16-bit variants; optimizations; bugfixes
+      2.15  (2017-03-18) fix png-1,2,4; all Imagenet JPGs; no runtime SSE detection on GCC
+      2.14  (2017-03-03) remove deprecated STBI_JPEG_OLD; fixes for Imagenet JPGs
+      2.13  (2016-12-04) experimental 16-bit API, only for PNG so far; fixes
+      2.12  (2016-04-02) fix typo in 2.11 PSD fix that caused crashes
+      2.11  (2016-04-02) 16-bit PNGS; enable SSE2 in non-gcc x64
+                         RGB-format JPEG; remove white matting in PSD;
+                         allocate large structures on the stack;
+                         correct channel count for PNG & BMP
+      2.10  (2016-01-22) avoid warning introduced in 2.09
+      2.09  (2016-01-16) 16-bit TGA; comments in PNM files; STBI_REALLOC_SIZED
+
+   See end of file for full revision history.
+
+
+ ============================    Contributors    =========================
+
+ Image formats                          Extensions, features
+    Sean Barrett (jpeg, png, bmp)          Jetro Lauha (stbi_info)
+    Nicolas Schulz (hdr, psd)              Martin "SpartanJ" Golini (stbi_info)
+    Jonathan Dummer (tga)                  James "moose2000" Brown (iPhone PNG)
+    Jean-Marc Lienher (gif)                Ben "Disch" Wenger (io callbacks)
+    Tom Seddon (pic)                       Omar Cornut (1/2/4-bit PNG)
+    Thatcher Ulrich (psd)                  Nicolas Guillemot (vertical flip)
+    Ken Miller (pgm, ppm)                  Richard Mitton (16-bit PSD)
+    github:urraka (animated gif)           Junggon Kim (PNM comments)
+    Christopher Forseth (animated gif)     Daniel Gibson (16-bit TGA)
+                                           socks-the-fox (16-bit PNG)
+                                           Jeremy Sawicki (handle all ImageNet JPGs)
+ Optimizations & bugfixes                  Mikhail Morozov (1-bit BMP)
+    Fabian "ryg" Giesen                    Anael Seghezzi (is-16-bit query)
+    Arseny Kapoulkine                      Simon Breuss (16-bit PNM)
+    John-Mark Allen
+    Carmelo J Fdez-Aguera
+
+ Bug & warning fixes
+    Marc LeBlanc            David Woo          Guillaume George     Martins Mozeiko
+    Christpher Lloyd        Jerry Jansson      Joseph Thomson       Blazej Dariusz Roszkowski
+    Phil Jordan                                Dave Moore           Roy Eltham
+    Hayaki Saito            Nathan Reed        Won Chun
+    Luke Graham             Johan Duparc       Nick Verigakis       the Horde3D community
+    Thomas Ruf              Ronny Chevalier                         github:rlyeh
+    Janez Zemva             John Bartholomew   Michal Cichon        github:romigrou
+    Jonathan Blow           Ken Hamada         Tero Hanninen        github:svdijk
+    Eugene Golushkov        Laurent Gomila     Cort Stratton        github:snagar
+    Aruelien Pocheville     Sergio Gonzalez    Thibault Reuille     github:Zelex
+    Cass Everitt            Ryamond Barbiero                        github:grim210
+    Paul Du Bois            Engin Manap        Aldo Culquicondor    github:sammyhw
+    Philipp Wiesemann       Dale Weiler        Oriol Ferrer Mesia   github:phprus
+    Josh Tobin              Neil Bickford      Matthew Gregan       github:poppolopoppo
+    Julian Raschke          Gregory Mullen     Christian Floisand   github:darealshinji
+    Baldur Karlsson         Kevin Schmidt      JR Smith             github:Michaelangel007
+                            Brad Weinberger    Matvey Cherevko      github:mosra
+    Luca Sas                Alexander Veselov  Zack Middleton       [reserved]
+    Ryan C. Gordon          [reserved]                              [reserved]
+                     DO NOT ADD YOUR NAME HERE
+
+                     Jacko Dirks
+
+  To add your name to the credits, pick a random blank space in the middle and fill it.
+  80% of merge conflicts on stb PRs are due to people adding their name at the end
+  of the credits.
+*/
+
+#ifndef STBI_INCLUDE_STB_IMAGE_H
+#define STBI_INCLUDE_STB_IMAGE_H
+
+// DOCUMENTATION
+//
+// Limitations:
+//    - no 12-bit-per-channel JPEG
+//    - no JPEGs with arithmetic coding
+//    - GIF always returns *comp=4
+//
+// Basic usage (see HDR discussion below for HDR usage):
+//    int x,y,n;
+//    unsigned char *data = stbi_load(filename, &x, &y, &n, 0);
+//    // ... process data if not NULL ...
+//    // ... x = width, y = height, n = # 8-bit components per pixel ...
+//    // ... replace '0' with '1'..'4' to force that many components per pixel
+//    // ... but 'n' will always be the number that it would have been if you said 0
+//    stbi_image_free(data);
+//
+// Standard parameters:
+//    int *x                 -- outputs image width in pixels
+//    int *y                 -- outputs image height in pixels
+//    int *channels_in_file  -- outputs # of image components in image file
+//    int desired_channels   -- if non-zero, # of image components requested in result
+//
+// The return value from an image loader is an 'unsigned char *' which points
+// to the pixel data, or NULL on an allocation failure or if the image is
+// corrupt or invalid. The pixel data consists of *y scanlines of *x pixels,
+// with each pixel consisting of N interleaved 8-bit components; the first
+// pixel pointed to is top-left-most in the image. There is no padding between
+// image scanlines or between pixels, regardless of format. The number of
+// components N is 'desired_channels' if desired_channels is non-zero, or
+// *channels_in_file otherwise. If desired_channels is non-zero,
+// *channels_in_file has the number of components that _would_ have been
+// output otherwise. E.g. if you set desired_channels to 4, you will always
+// get RGBA output, but you can check *channels_in_file to see if it's trivially
+// opaque because e.g. there were only 3 channels in the source image.
+//
+// An output image with N components has the following components interleaved
+// in this order in each pixel:
+//
+//     N=#comp     components
+//       1           grey
+//       2           grey, alpha
+//       3           red, green, blue
+//       4           red, green, blue, alpha
+//
+// If image loading fails for any reason, the return value will be NULL,
+// and *x, *y, *channels_in_file will be unchanged. The function
+// stbi_failure_reason() can be queried for an extremely brief, end-user
+// unfriendly explanation of why the load failed. Define STBI_NO_FAILURE_STRINGS
+// to avoid compiling these strings at all, and STBI_FAILURE_USERMSG to get slightly
+// more user-friendly ones.
+//
+// Paletted PNG, BMP, GIF, and PIC images are automatically depalettized.
+//
+// To query the width, height and component count of an image without having to
+// decode the full file, you can use the stbi_info family of functions:
+//
+//   int x,y,n,ok;
+//   ok = stbi_info(filename, &x, &y, &n);
+//   // returns ok=1 and sets x, y, n if image is a supported format,
+//   // 0 otherwise.
+//
+// Note that stb_image pervasively uses ints in its public API for sizes,
+// including sizes of memory buffers. This is now part of the API and thus
+// hard to change without causing breakage. As a result, the various image
+// loaders all have certain limits on image size; these differ somewhat
+// by format but generally boil down to either just under 2GB or just under
+// 1GB. When the decoded image would be larger than this, stb_image decoding
+// will fail.
+//
+// Additionally, stb_image will reject image files that have any of their
+// dimensions set to a larger value than the configurable STBI_MAX_DIMENSIONS,
+// which defaults to 2**24 = 16777216 pixels. Due to the above memory limit,
+// the only way to have an image with such dimensions load correctly
+// is for it to have a rather extreme aspect ratio. Either way, the
+// assumption here is that such larger images are likely to be malformed
+// or malicious. If you do need to load an image with individual dimensions
+// larger than that, and it still fits in the overall size limit, you can
+// #define STBI_MAX_DIMENSIONS on your own to be something larger.
+//
+// ===========================================================================
+//
+// UNICODE:
+//
+//   If compiling for Windows and you wish to use Unicode filenames, compile
+//   with
+//       #define STBI_WINDOWS_UTF8
+//   and pass utf8-encoded filenames. Call stbi_convert_wchar_to_utf8 to convert
+//   Windows wchar_t filenames to utf8.
+//
+// ===========================================================================
+//
+// Philosophy
+//
+// stb libraries are designed with the following priorities:
+//
+//    1. easy to use
+//    2. easy to maintain
+//    3. good performance
+//
+// Sometimes I let "good performance" creep up in priority over "easy to maintain",
+// and for best performance I may provide less-easy-to-use APIs that give higher
+// performance, in addition to the easy-to-use ones. Nevertheless, it's important
+// to keep in mind that from the standpoint of you, a client of this library,
+// all you care about is #1 and #3, and stb libraries DO NOT emphasize #3 above all.
+//
+// Some secondary priorities arise directly from the first two, some of which
+// provide more explicit reasons why performance can't be emphasized.
+//
+//    - Portable ("ease of use")
+//    - Small source code footprint ("easy to maintain")
+//    - No dependencies ("ease of use")
+//
+// ===========================================================================
+//
+// I/O callbacks
+//
+// I/O callbacks allow you to read from arbitrary sources, like packaged
+// files or some other source. Data read from callbacks are processed
+// through a small internal buffer (currently 128 bytes) to try to reduce
+--- END FILE: include/stb_image.h ---
+
+--- START FILE: include/task_queue.h ---
+#ifndef TASK_QUEUE_H
+#define TASK_QUEUE_H
+
+#define MAX_TASKS 5000
+#define MAX_FILENAME_LEN 256
+
+typedef struct {
+    char filenames[MAX_TASKS][MAX_FILENAME_LEN];
+    int total_tasks;
+    int current_index;
+} TaskQueue;
+
+void init_task_queue(TaskQueue* queue);
+const char* get_next_task(TaskQueue* queue);
+
+#endif
+--- END FILE: include/task_queue.h ---
+
+--- START FILE: include/utils.h ---
+// include/utils.h
+#ifndef UTILS_H
+#define UTILS_H
+#define TAG_TASK_REQUEST     1
+#define TAG_TASK_SEND        2
+#define TAG_RESULT           3
+#define TAG_TERMINATE        4
+#define TAG_EDGE_REQUEST     5
+#define TAG_EDGE_DATA        6
+#define TAG_EDGE_DIMS        7
+#define MAX_FILENAME_LEN     256
+#define EDGE_TAG             99
+
+#include <stdio.h>
+#include <stdarg.h>
+
+
+
+// Simple logging utilities
+
+static inline void log_info(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stdout, "[INFO] ");
+    vfprintf(stdout, fmt, args);
+    fprintf(stdout, "\n");
+    va_end(args);
+}
+
+static inline void log_error(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "[ERROR] ");
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+}
+
+#endif // UTILS_H--- END FILE: include/utils.h ---
+
+--- START FILE: src/cuda_filter.cu ---
+#include <cuda_runtime.h>
+#include <math.h>
+#include "cuda_filter.h"
+
+// Convert RGB image to grayscale
+__global__ void rgb_to_gray_kernel(unsigned char* input, unsigned char* gray, int width, int height, int channels) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+    int i = idx * channels;
+    gray[idx] = 0.299f * input[i] + 0.587f * input[i+1] + 0.114f * input[i+2];
+}
+
+// Apply Gaussian Blur
+__global__ void gaussian_blur_kernel_3x3(unsigned char* gray, unsigned char* blurred, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int sum = 0;
+    int i = y * width + x;
+    int weights[3][3] = {{1, 2, 1}, {2, 4, 2}, {1, 2, 1}};
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            int px = x + dx;
+            int py = y + dy;
+            sum += gray[py * width + px] * weights[dy + 1][dx + 1];
+        }
+    }
+    blurred[i] = sum / 16;
+}
+
+// Example 5x5 Gaussian (approx. σ = 1.4, normalized)
+__constant__ int gauss5x5[5][5] = {
+    {1,  4,  6,  4, 1},
+    {4, 16, 24, 16, 4},
+    {6, 24, 36, 24, 6},
+    {4, 16, 24, 16, 4},
+    {1,  4,  6,  4, 1}
+};
+
+__global__ void gaussian_blur_kernel_5x5(unsigned char* gray, unsigned char* blurred, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 2 || y < 2 || x >= width - 2 || y >= height - 2) return;
+
+    int sum = 0;
+    int weight_sum = 256;
+    int i = y * width + x;
+
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            int px = x + dx;
+            int py = y + dy;
+            sum += gray[py * width + px] * gauss5x5[dy + 2][dx + 2];
+        }
+    }
+    blurred[i] = sum / weight_sum;
+}
+
+// Apply Sobel filter
+__global__ void sobel_kernel(unsigned char* blurred, unsigned char* edge, float* direction, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    int Gx = -1 * blurred[(y-1)*width + (x-1)] + 1 * blurred[(y-1)*width + (x+1)]
+           -2 * blurred[y*width + (x-1)] + 2 * blurred[y*width + (x+1)]
+           -1 * blurred[(y+1)*width + (x-1)] + 1 * blurred[(y+1)*width + (x+1)];
+
+    int Gy = -1 * blurred[(y-1)*width + (x-1)] - 2 * blurred[(y-1)*width + x] - 1 * blurred[(y-1)*width + (x+1)]
+           +1 * blurred[(y+1)*width + (x-1)] + 2 * blurred[(y+1)*width + x] + 1 * blurred[(y+1)*width + (x+1)];
+
+    edge[i] = min(255, (int)sqrtf((float)(Gx * Gx + Gy * Gy)));
+
+    float angle = atan2f((float)Gy, (float)Gx) * 180.0f / M_PI;
+    direction[i] = angle;
+
+}
+
+// Apply non-maximum suppression
+__global__ void non_max_suppression_kernel(unsigned char* gradient, float* direction, unsigned char* output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    float angle = direction[i];
+    float mag = gradient[i];
+    
+
+    float m1 = 0, m2 = 0;
+
+    // Angle normalization: 0°, 45°, 90°, 135°
+    angle = fmodf(angle + 180.0f, 180.0f);  // Normalize to [0,180)
+
+    if ((angle >= 0 && angle < 22.5) || (angle >= 157.5 && angle < 180)) {
+        m1 = gradient[i + 1];
+        m2 = gradient[i - 1];
+    } else if (angle >= 22.5 && angle < 67.5) {
+        m1 = gradient[(y - 1) * width + (x + 1)];
+        m2 = gradient[(y + 1) * width + (x - 1)];
+    } else if (angle >= 67.5 && angle < 112.5) {
+        m1 = gradient[(y - 1) * width + x];
+        m2 = gradient[(y + 1) * width + x];
+    } else if (angle >= 112.5 && angle < 157.5) {
+        m1 = gradient[(y - 1) * width + (x - 1)];
+        m2 = gradient[(y + 1) * width + (x + 1)];
+    }
+
+    if (mag >= m1 && mag >= m2) {
+        output[i] = (unsigned char)mag;
+    } else {
+        output[i] = 0;
+    }
+}
+
+// Apply double thresholding
+__global__ void double_threshold_kernel(unsigned char* input, unsigned char* output, int width, int height, unsigned char low_thresh, unsigned char high_thresh) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    unsigned char val = input[idx];
+    if (val >= high_thresh) {
+        output[idx] = 255;  // Strong edge
+    } else if (val >= low_thresh) {
+        output[idx] = 100;  // Weak edge
+    } else {
+        output[idx] = 0;    // Non-edge
+    }
+}
+
+// Suppress isolated weak edges
+__global__ void suppress_weak_clusters_kernel(unsigned char* input, unsigned char* output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    if (input[i] == 100) { // weak edge
+        int count = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) continue;
+                int ni = (y + dy) * width + (x + dx);
+                if (input[ni] == 100 || input[ni] == 255) count++;
+            }
+        }
+        output[i] = (count >= 5) ? 100 : 0;
+    } else {
+        output[i] = input[i];
+    }
+}
+
+// DFS-based edge tracking kernel (one pass propagation)
+__global__ void edge_tracking_dfs_kernel(unsigned char* input, unsigned char* output, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return;
+
+    int i = y * width + x;
+    if (input[i] == 255) {
+        output[i] = 255;
+        return;
+    }
+
+    if (input[i] == 100) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int nx = x + dx;
+                int ny = y + dy;
+                int ni = ny * width + nx;
+                if (input[ni] == 255) {
+                    output[i] = 255;
+                    return;
+                }
+            }
+        }
+        output[i] = 0;
+    } else {
+        output[i] = 0;
+    }
+}
+
+// Temporal Linking Kernel
+__global__ void temporal_link_kernel(unsigned char* curr_edge, unsigned char* prev_edge, unsigned char* output, int width, int height) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= width * height) return;
+
+    if (curr_edge[idx] && prev_edge[idx])
+        output[idx] = 255;  // Reinforce edge
+    else
+        output[idx] = 0;    // Suppress unstable edge
+}
+
+extern "C"
+void cuda_canny(unsigned char* input, unsigned char* output, int width, int height, int channels, unsigned char* prev_edge) {
+    int img_size = width * height;
+    unsigned char *d_input, *d_gray, *d_blur, *d_edge, *d_nms, *d_thresh, *d_final, *d_cleaned, *d_prev_edge, *d_temporal;
+    float* d_direction;
+
+    cudaMalloc(&d_input, img_size * channels);
+    cudaMalloc(&d_gray, img_size);
+    cudaMalloc(&d_blur, img_size);
+    cudaMalloc(&d_edge, img_size);
+    cudaMalloc(&d_nms, img_size);
+    cudaMalloc(&d_thresh, img_size);
+    cudaMalloc(&d_final, img_size);
+    cudaMalloc(&d_cleaned, img_size);
+    cudaMalloc(&d_prev_edge, img_size);
+    cudaMalloc(&d_temporal, img_size);
+    cudaMalloc(&d_direction, img_size * sizeof(float));
+
+    cudaMemcpy(d_input, input, img_size * channels, cudaMemcpyHostToDevice);
+
+    int threads = 256;
+    int blocks = (img_size + threads - 1) / threads;
+    rgb_to_gray_kernel<<<blocks, threads>>>(d_input, d_gray, width, height, channels);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((width + 15) / 16, (height + 15) / 16);
+    gaussian_blur_kernel_5x5<<<numBlocks, threadsPerBlock>>>(d_gray, d_blur, width, height);
+    sobel_kernel<<<numBlocks, threadsPerBlock>>>(d_blur, d_edge, d_direction, width, height);
+    non_max_suppression_kernel<<<numBlocks, threadsPerBlock>>>(d_edge, d_direction, d_nms, width, height);
+
+    // Apply double thresholding: low = 50, high = 100
+    double_threshold_kernel<<<blocks, threads>>>(d_nms, d_thresh, width, height, 50, 100);
+
+    // Suppress weak clusters
+    suppress_weak_clusters_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_cleaned, width, height);
+    
+    // Temporal link kernel
+    temporal_link_kernel<<<blocks, threads>>>(d_thresh, d_prev_edge, d_temporal, width, height);
+
+    // Run edge tracking 2 iterations
+    edge_tracking_dfs_kernel<<<numBlocks, threadsPerBlock>>>(d_thresh, d_final, width, height);
+    edge_tracking_dfs_kernel<<<numBlocks, threadsPerBlock>>>(d_final, d_thresh, width, height);
+
+    cudaMemcpy(output, d_thresh, img_size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_input);
+    cudaFree(d_gray);
+    cudaFree(d_blur);
+    cudaFree(d_edge);
+    cudaFree(d_nms);
+    cudaFree(d_thresh);
+    cudaFree(d_final);
+    cudaFree(d_cleaned);
+    cudaFree(d_direction);
+--- END FILE: src/cuda_filter.cu ---
+
+--- START FILE: src/extract_frames.py ---
+import cv2
+import os
+
+os.makedirs("frames", exist_ok=True)
+cap = cv2.VideoCapture("cappy.mp4")
+i = 0
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+    cv2.imwrite(f"frames/frame_{i:04d}.jpg", frame)
+    i += 1
+cap.release()
+print(f"Extracted {i} frames.")
+--- END FILE: src/extract_frames.py ---
+
+--- START FILE: src/frame_io_serial.c ---
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#include "stb_image_write.h"
+
+unsigned char* load_image(const char* filename, int* w, int* h, int* channels) {
+    return stbi_load(filename, w, h, channels, 0);
+}
+
+void save_image(const char* filename, unsigned char* data, int w, int h, int channels) {
+    stbi_write_jpg(filename, w, h, channels, data, 100);
+}
+
+// Get headers: https://github.com/nothings/stb--- END FILE: src/frame_io_serial.c ---
+
+--- START FILE: src/frame_io.c ---
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#include "stb_image_write.h"
+
+unsigned char* load_image(const char* filename, int* w, int* h, int* channels) {
+    return stbi_load(filename, w, h, channels, 0);
+}
+
+void save_image(const char* filename, unsigned char* data, int w, int h, int channels) {
+    stbi_write_jpg(filename, w, h, channels, data, 100);
+}
+
+// Get headers: https://github.com/nothings/stb--- END FILE: src/frame_io.c ---
+
+--- START FILE: src/main_cuda.c ---
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <dirent.h> 
+#include "frame_io.h"
+#include "utils.h"
+#include "cuda_filter.h"
+
+#define MAX_FILENAME_LEN 256
+
+int count_frames(const char* folder) {
+    int count = 0;
+    DIR* dir = opendir(folder);
+    if (!dir) {
+        perror("Failed to open frames directory");
+        return 0;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, "frame_") && strstr(entry->d_name, ".jpg"))
+            count++;
+    }
+
+    closedir(dir);
+    return count;
+}
+
+int main() {
+    int total_frames = count_frames("frames");
+    if (total_frames == 0) {
+        fprintf(stderr, "No frames found in 'frames/'\n");
+        return 1;
+    }
+
+    char input_filename[MAX_FILENAME_LEN];
+    char output_filename[MAX_FILENAME_LEN];
+
+    double start_time = (double)clock() / CLOCKS_PER_SEC;
+
+    for (int i = 0; i < total_frames; i++) {
+        snprintf(input_filename, sizeof(input_filename), "frames/frame_%04d.jpg", i);
+
+        int w, h, c;
+        unsigned char* img = load_image(input_filename, &w, &h, &c);
+        if (!img) {
+            log_error("CUDA: Failed to load %s", input_filename);
+            continue;
+        }
+
+        unsigned char* edges = malloc(w * h);
+        cuda_canny(img, edges, w, h, c, NULL);  // No temporal linking for now
+
+        snprintf(output_filename, sizeof(output_filename), "output/output_cuda/frame_%04d.jpg", i);
+        save_image(output_filename, edges, w, h, 1);
+        log_info("CUDA: Saved %s", output_filename);
+
+        free(img);
+        free(edges);
+    }
+
+    double end_time = (double)clock() / CLOCKS_PER_SEC;
+    printf("CUDA-only processing took %.2f seconds\n", end_time - start_time);
+
+    return 0;
+}
+--- END FILE: src/main_cuda.c ---
+
+--- START FILE: src/main_mpi_cuda.c ---
+#include <mpi.h>
+#include <stdio.h>
+#include "utils.h"
+
+void run_master(int world_size);
+void run_worker_cuda(int rank, int world_size);
+
+int main(int argc, char** argv) {
+    MPI_Init(&argc, &argv);
+
+    int rank, world_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    log_info("MPI initialized with %d processes.", world_size);
+
+    double start_time = MPI_Wtime();
+
+    if (rank == 0) {
+        run_master(world_size);
+    } else {
+        run_worker_cuda(rank, world_size);
+    }
+
+    double end_time = MPI_Wtime();
+    if (rank == 0) {
+        log_info("Total MPI+CUDA execution time: %.2f seconds", end_time - start_time);
+    }
+
+    MPI_Finalize();
+    return 0;
+}--- END FILE: src/main_mpi_cuda.c ---
+
+--- START FILE: src/main_mpi.c ---
+#include <mpi.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "frame_io.h"
+#include "utils.h"
+#include <dirent.h>
+
+
+#define MAX_FILENAME_LEN 256
+#define TAG_TASK 1
+
+// CPU-only filtering
+void simple_edge_filter(unsigned char* input, unsigned char* output, int w, int h, int c) {
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 1; x < w - 1; x++) {
+            int gx = input[(y * w + (x+1)) * c] - input[(y * w + (x-1)) * c];
+            int gy = input[((y+1) * w + x) * c] - input[((y-1) * w + x) * c];
+            int mag = abs(gx) + abs(gy);
+            output[y * w + x] = (mag > 100) ? 255 : 0;
+        }
+    }
+}
+
+// Count frame
+int count_frames(const char* folder) {
+    int count = 0;
+    DIR* dir = opendir(folder);
+    if (!dir) {
+        perror("Failed to open frames directory");
+        return 0;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, "frame_") && strstr(entry->d_name, ".jpg"))
+            count++;
+    }
+
+    closedir(dir);
+    return count;
+}
+
+void master(int total_frames, int world_size) {
+    int frame_index = 0;
+    int active_workers = world_size - 1;
+
+    for (int rank = 1; rank < world_size && frame_index < total_frames; ++rank) {
+        MPI_Send(&frame_index, 1, MPI_INT, rank, TAG_TASK, MPI_COMM_WORLD);
+        frame_index++;
+    }
+
+    while (active_workers > 0) {
+        int worker_rank, frame_done;
+        MPI_Status status;
+        MPI_Recv(&frame_done, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        worker_rank = status.MPI_SOURCE;
+
+        if (frame_index < total_frames) {
+            MPI_Send(&frame_index, 1, MPI_INT, worker_rank, TAG_TASK, MPI_COMM_WORLD);
+            frame_index++;
+        } else {
+            int dummy = -1;
+            MPI_Send(&dummy, 1, MPI_INT, worker_rank, TAG_TERMINATE, MPI_COMM_WORLD);
+            active_workers--;
+        }
+    }
+}
+
+void worker(int rank) {
+    int w, h, c;
+    int frame_num;
+    char input_filename[MAX_FILENAME_LEN];
+    char output_filename[MAX_FILENAME_LEN];
+
+    while (1) {
+        MPI_Status status;
+        MPI_Recv(&frame_num, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+        if (status.MPI_TAG == TAG_TERMINATE) {
+            break;
+        }
+
+        snprintf(input_filename, sizeof(input_filename), "frames/frame_%04d.jpg", frame_num);
+        unsigned char* img = load_image(input_filename, &w, &h, &c);
+        if (!img) {
+            log_error("WORKER %d: Failed to load frame %s", rank, input_filename);
+            MPI_Send(&frame_num, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            continue;
+        }
+
+        unsigned char* edges = malloc(w * h);
+        simple_edge_filter(img, edges, w, h, c);
+
+        snprintf(output_filename, sizeof(output_filename), "output/output_mpi/frame_%04d.jpg", frame_num);
+        save_image(output_filename, edges, w, h, 1);
+        log_info("WORKER %d: Saved %s", rank, output_filename);
+
+        free(img);
+        free(edges);
+
+        MPI_Send(&frame_num, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+    }
+}
+
+int main(int argc, char** argv) {
+    MPI_Init(&argc, &argv);
+    int rank, world_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    int total_frames = count_frames("frames");
+
+    double start_time = 0.0;
+    if (rank == 0) {
+        log_info("MASTER: Starting with %d frames and %d workers", total_frames, world_size - 1);
+        start_time = MPI_Wtime();
+    }
+
+    if (rank == 0) {
+        master(total_frames, world_size);
+        double end_time = MPI_Wtime();
+        log_info("MASTER: All frames processed.");
+        printf("Total MPI execution time: %.2f seconds\n", end_time - start_time);
+    } else {
+        worker(rank);
+    }
+
+    MPI_Finalize();
+    return 0;
+}
+--- END FILE: src/main_mpi.c ---
+
+--- START FILE: src/main_serial.c ---
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "frame_io.h"
+#include "utils.h"
+#include <time.h>
+
+#define MAX_FILENAME_LEN 256
+
+// Dummy CPU grayscale edge detection (for demo purposes)
+void simple_edge_filter(unsigned char* input, unsigned char* output, int w, int h, int c) {
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 1; x < w - 1; x++) {
+            int gx = input[(y * w + (x+1)) * c] - input[(y * w + (x-1)) * c];
+            int gy = input[((y+1) * w + x) * c] - input[((y-1) * w + x) * c];
+            int mag = abs(gx) + abs(gy);
+            output[y * w + x] = (mag > 100) ? 255 : 0;
+        }
+    }
+}
+
+int main() {
+    clock_t start = clock();
+    int total_frames = 3936;  // Adjust as needed
+    char input_filename[MAX_FILENAME_LEN];
+    char output_filename[MAX_FILENAME_LEN];
+
+    for (int i = 0; i < total_frames; i++) {
+        snprintf(input_filename, sizeof(input_filename), "frames/frame_%04d.jpg", i);
+        int w, h, c;
+        unsigned char* img = load_image(input_filename, &w, &h, &c);
+        if (!img) {
+            log_error("SERIAL: Failed to load %s", input_filename);
+            continue;
+        }
+
+        unsigned char* edges = malloc(w * h);
+        simple_edge_filter(img, edges, w, h, c);
+
+        snprintf(output_filename, sizeof(output_filename), "output/output_serial/frame_%04d.jpg", i);
+        save_image(output_filename, edges, w, h, 1);
+        log_info("SERIAL: Saved %s", output_filename);
+
+        free(img);
+        free(edges);
+    }
+
+    clock_t end = clock();
+
+    double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+    printf("Serial processing took %.2f seconds\n", elapsed);
+
+    return 0;
+}
+--- END FILE: src/main_serial.c ---
+
+--- START FILE: src/master.c ---
+#include <mpi.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include "utils.h"
+#include "task_queue.h"
+
+#define TAG_TASK_REQUEST     1
+#define TAG_TASK_SEND        2
+#define TAG_RESULT           3
+#define TAG_TERMINATE        4
+#define TAG_EDGE_REQUEST     5
+#define TAG_EDGE_DATA        6
+#define TAG_EDGE_DIMS        7
+#define MAX_FRAMES           10000  // Adjust based on your needs
+
+typedef struct {
+    unsigned char* edges;
+    int width;
+    int height;
+    int available;
+} FrameEdge;
+
+void run_master(int world_size) {
+    TaskQueue queue;
+    init_task_queue(&queue);
+    log_info("MASTER: Initialized queue with %d frames", queue.total_tasks);
+
+    bool terminated[world_size];
+    for (int i = 0; i < world_size; i++) terminated[i] = false;
+
+    // Edge storage for temporal linking
+    FrameEdge edge_storage[MAX_FRAMES] = {0};
+    int tasks_sent = 0;
+    int terminated_workers = 0;
+
+    // Warm-up period
+    for (int i = 0; i < 3; i++) {
+        log_info("MASTER: Warm-up %d/3", i+1);
+        sleep(1);
+    }
+
+    while (terminated_workers < world_size - 1) {
+        MPI_Status status;
+        int flag;
+        MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, &status);
+
+        if (flag) {
+            // Handle edge data requests
+            if (status.MPI_TAG == TAG_EDGE_REQUEST) {
+                int requested_frame;
+                MPI_Recv(&requested_frame, 1, MPI_INT, status.MPI_SOURCE, 
+                        TAG_EDGE_REQUEST, MPI_COMM_WORLD, &status);
+                
+                log_info("MASTER: Worker %d requested edges for frame %d", 
+                        status.MPI_SOURCE, requested_frame);
+
+                if (requested_frame >= 0 && requested_frame < MAX_FRAMES && 
+                    edge_storage[requested_frame].available) {
+                    // Send edge dimensions first
+                    int dims[2] = {edge_storage[requested_frame].width, 
+                                  edge_storage[requested_frame].height};
+                    MPI_Send(dims, 2, MPI_INT, status.MPI_SOURCE, 
+                            TAG_EDGE_DIMS, MPI_COMM_WORLD);
+                    
+                    // Send edge data
+                    MPI_Send(edge_storage[requested_frame].edges, 
+                            dims[0] * dims[1], MPI_UNSIGNED_CHAR,
+                            status.MPI_SOURCE, TAG_EDGE_DATA, MPI_COMM_WORLD);
+                    
+                    log_info("MASTER: Sent edges for frame %d to worker %d", 
+                            requested_frame, status.MPI_SOURCE);
+                } else {
+                    log_error("MASTER: No edges available for frame %d", requested_frame);
+                    int dims[2] = {0, 0};
+                    MPI_Send(dims, 2, MPI_INT, status.MPI_SOURCE, 
+                            TAG_EDGE_DIMS, MPI_COMM_WORLD);
+                }
+            }
+            // Handle task requests
+            else if (status.MPI_TAG == TAG_TASK_REQUEST) {
+                int dummy;
+                MPI_Recv(&dummy, 1, MPI_INT, status.MPI_SOURCE, TAG_TASK_REQUEST, MPI_COMM_WORLD, &status);
+                int worker_rank = status.MPI_SOURCE;
+
+                if (queue.current_index < queue.total_tasks) {
+                    const char* task = get_next_task(&queue);
+                    MPI_Send(task, MAX_FILENAME_LEN, MPI_CHAR, worker_rank, 
+                            TAG_TASK_SEND, MPI_COMM_WORLD);
+                    tasks_sent++;
+                    log_info("MASTER: Sent frame %d/%d to worker %d", 
+                        queue.current_index - 1, queue.total_tasks, worker_rank);
+                } else {
+                    if (!terminated[worker_rank]) {
+                        MPI_Send(NULL, 0, MPI_CHAR, worker_rank, TAG_TERMINATE, MPI_COMM_WORLD);
+                        terminated[worker_rank] = true;
+                        terminated_workers++;
+                        log_info("MASTER: Sent TERMINATE to worker %d (%d/%d terminated)", 
+                                 worker_rank, terminated_workers, world_size - 1);
+                    }
+                }
+            }
+            // Handle edge data storage
+            else if (status.MPI_TAG == TAG_EDGE_DIMS) {
+                int dims[2];
+                MPI_Recv(dims, 2, MPI_INT, status.MPI_SOURCE, 
+                        TAG_EDGE_DIMS, MPI_COMM_WORLD, &status);
+                
+                int frame_num;
+                char frame_path[MAX_FILENAME_LEN];
+                MPI_Recv(frame_path, MAX_FILENAME_LEN, MPI_CHAR, status.MPI_SOURCE,
+                    TAG_EDGE_DIMS, MPI_COMM_WORLD, &status);
+                
+                if (sscanf(frame_path, "frames/frame_%d.jpg", &frame_num) != 1) {
+                    log_error("MASTER: Failed to parse frame number from '%s'", frame_path);
+                    continue;
+                }
+                
+                if (frame_num >= 0 && frame_num < MAX_FRAMES) {
+                    // Free previous data if exists
+                    if (edge_storage[frame_num].edges) {
+                        free(edge_storage[frame_num].edges);
+                    }
+                    
+                    edge_storage[frame_num].width = dims[0];
+                    edge_storage[frame_num].height = dims[1];
+                    edge_storage[frame_num].edges = malloc(dims[0] * dims[1]);
+                    edge_storage[frame_num].available = 0;
+                    
+                    // Receive edge data
+                    MPI_Recv(edge_storage[frame_num].edges, dims[0] * dims[1],
+                            MPI_UNSIGNED_CHAR, status.MPI_SOURCE, TAG_EDGE_DATA,
+                            MPI_COMM_WORLD, &status);
+                    
+                    edge_storage[frame_num].available = 1;
+                    log_info("MASTER: Stored edges for frame %d (%dx%d)", 
+                            frame_num, dims[0], dims[1]);
+                }
+            }
+            // Handle termination acknowledgments
+            else if (status.MPI_TAG == TAG_TERMINATE) {
+                int ack;
+                MPI_Recv(&ack, 1, MPI_INT, status.MPI_SOURCE, 
+                        TAG_TERMINATE, MPI_COMM_WORLD, &status);
+                log_info("MASTER: Received TERMINATE ack from worker %d", 
+                        status.MPI_SOURCE);
+                if (!terminated[status.MPI_SOURCE]) {
+                    terminated[status.MPI_SOURCE] = true;
+                    terminated_workers++;
+                    log_info("MASTER: Now %d/%d workers terminated", terminated_workers, world_size - 1);
+                }
+            }
+            // Handle results
+            else if (status.MPI_TAG == TAG_RESULT) {
+                char result[512];
+                MPI_Recv(result, 512, MPI_CHAR, MPI_ANY_SOURCE, 
+                        TAG_RESULT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                log_info("MASTER: Received result: %s", result);
+            }
+        } else {
+            usleep(1000); // Prevent busy waiting
+        }
+    }
+
+    // Cleanup
+    for (int i = 0; i < MAX_FRAMES; i++) {
+        if (edge_storage[i].edges) {
+            free(edge_storage[i].edges);
+        }
+    }
+    
+    log_info("MASTER: All workers terminated. Processed %d/%d frames.", 
+            tasks_sent, queue.total_tasks);
+}--- END FILE: src/master.c ---
+
+--- START FILE: src/task_queue.c ---
+#include "task_queue.h"
+#include <dirent.h>
+#include <string.h>
+#include <stdio.h>
+
+void init_task_queue(TaskQueue* queue) {
+    queue->total_tasks = 0;
+    queue->current_index = 0;
+
+    // First read all filenames
+    DIR* dir = opendir("frames/");
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, ".jpg")) {
+            snprintf(
+                queue->filenames[queue->total_tasks],
+                MAX_FILENAME_LEN,
+                "frames/%.200s", // truncate long names
+                entry->d_name
+            );
+            queue->total_tasks++;
+            if (queue->total_tasks >= MAX_TASKS) break;
+        }
+    }
+
+    closedir(dir);
+
+    // Sort frames numerically (assuming format frame_XXXX.jpg)
+    qsort(queue->filenames, queue->total_tasks, MAX_FILENAME_LEN, 
+        (int (*)(const void*, const void*))strcmp);
+}
+
+const char* get_next_task(TaskQueue* queue) {
+    if (queue->current_index >= queue->total_tasks) return NULL;
+    return queue->filenames[queue->current_index++];
+}--- END FILE: src/task_queue.c ---
+
+--- START FILE: src/utils.c ---
+--- END FILE: src/utils.c ---
+
+--- START FILE: src/worker_cuda.c ---
+#include <mpi.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>  // Added for usleep
+#include "frame_io.h"
+#include "cuda_filter.h"
+#include "utils.h"
+
+#define TAG_TASK_REQUEST 1
+#define TAG_TASK_SEND    2
+#define TAG_RESULT       3
+#define TAG_TERMINATE    4
+#define MAX_FILENAME_LEN 256
+#define EDGE_TAG 99
+
+void run_worker_cuda(int rank, int world_size) {
+    int termination_received = 0;
+    int dummy = 0;
+    double worker_start_time = MPI_Wtime();
+    int current_frame_num = -1;
+    unsigned char* prev_edge = NULL;
+    int prev_width = 0, prev_height = 0;
+
+    while (!termination_received) {
+        // Debug: Worker 2 timeout check
+        if (rank == 2 && (MPI_Wtime() - worker_start_time > 10.0)) {
+            log_error("WORKER %d EMERGENCY: No termination after 10 seconds!", rank);
+            log_error("  Current state: termination_received=%d, last_frame=%d", 
+                     termination_received, current_frame_num);
+            
+            if (rank < world_size - 1) {
+                unsigned char emergency_signal = 0xFF;
+                MPI_Send(&emergency_signal, 1, MPI_UNSIGNED_CHAR, rank+1, EDGE_TAG, MPI_COMM_WORLD);
+                log_info("WORKER %d: Sent emergency signal to %d", rank, rank+1);
+            }
+            // Graceful fallback: send TERMINATE ack to master
+            MPI_Send(&dummy, 1, MPI_INT, 0, TAG_TERMINATE, MPI_COMM_WORLD);
+            log_info("WORKER %d: Sent emergency TERMINATE ack to master", rank);
+
+            break;
+        }
+
+        // Request task
+        MPI_Send(&dummy, 1, MPI_INT, 0, TAG_TASK_REQUEST, MPI_COMM_WORLD);
+        log_info("WORKER %d: Requested new task (last frame: %d)", rank, current_frame_num);
+
+        // Receive task
+        MPI_Status status;
+        char task[MAX_FILENAME_LEN];
+        MPI_Recv(task, MAX_FILENAME_LEN, MPI_CHAR, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+        if (status.MPI_TAG == TAG_TERMINATE) {
+            log_info("WORKER %d: Received TERMINATE signal", rank);
+            termination_received = 1;
+            
+            // Final edge transfer for cleanup
+            if (rank < world_size - 1) {
+                unsigned char dummy_edge = 0;
+                MPI_Send(&dummy_edge, 1, MPI_UNSIGNED_CHAR, rank+1, EDGE_TAG, MPI_COMM_WORLD);
+                log_info("WORKER %d: Sent final edge signal to %d", rank, rank+1);
+            }
+            
+            MPI_Send(&dummy, 1, MPI_INT, 0, TAG_TERMINATE, MPI_COMM_WORLD);
+            log_info("WORKER %d: Termination complete", rank);
+            break;
+        }
+
+        // Extract frame number
+        int frame_num;
+        if (sscanf(task, "frames/frame_%d.jpg", &frame_num) != 1) {
+            log_error("WORKER %d: Failed to parse frame number from %s", rank, task);
+            continue;
+        }
+        log_info("WORKER %d: Processing frame %d", rank, frame_num);
+
+        // Get previous frame's edges (if not first frame)
+        if (frame_num > 0) {
+            int expected_prev = frame_num - 1;
+            if (prev_edge == NULL || expected_prev != current_frame_num) {
+                int edge_dims[2] = {0, 0};
+                int retries = 0;
+                const int max_retries = 200;  // Retry for up to 2 seconds
+        
+                while (edge_dims[0] == 0 || edge_dims[1] == 0) {
+                    log_info("WORKER %d: Requesting edges for frame %d (attempt %d)", rank, expected_prev, retries + 1);
+                    MPI_Send(&expected_prev, 1, MPI_INT, 0, TAG_EDGE_REQUEST, MPI_COMM_WORLD);
+                    MPI_Recv(edge_dims, 2, MPI_INT, 0, TAG_EDGE_DIMS, MPI_COMM_WORLD, &status);
+        
+                    if (edge_dims[0] == 0 || edge_dims[1] == 0) {
+                        retries++;
+                        if (retries >= max_retries) {
+                            log_error("WORKER %d: Timeout waiting for edges of frame %d — skipping temporal linking.", rank, expected_prev);
+                            break;
+                        }
+                        usleep(10000);  // wait 10ms
+                    }
+                }
+        
+                // Only receive edge data if dimensions are valid
+                if (edge_dims[0] > 0 && edge_dims[1] > 0) {
+                    if (prev_edge) free(prev_edge);
+                    prev_width = edge_dims[0];
+                    prev_height = edge_dims[1];
+                    prev_edge = malloc(prev_width * prev_height);
+        
+                    MPI_Recv(prev_edge, prev_width * prev_height, MPI_UNSIGNED_CHAR,
+                             0, TAG_EDGE_DATA, MPI_COMM_WORLD, &status);
+        
+                    log_info("WORKER %d: Received edges for frame %d (%dx%d)",
+                             rank, expected_prev, prev_width, prev_height);
+                } else {
+                    if (prev_edge) {
+                        free(prev_edge);
+                        prev_edge = NULL;
+                    }
+                    prev_width = prev_height = 0;
+                }
+            }
+        }
+        
+        
+
+        // Process frame with temporal linking
+        int w, h, c;
+        unsigned char* img = load_image(task, &w, &h, &c);
+        if (!img) {
+            log_error("WORKER %d: Failed to load image: %s", rank, task);
+            continue;
+        }
+
+        unsigned char* output_img = malloc(w * h);
+        unsigned char* output_edges = malloc(w * h);
+        
+        cuda_canny(img, output_edges, w, h, c, prev_edge);
+        log_info("WORKER %d: Processed frame %d with temporal linking", rank, frame_num);
+
+        // Save results
+        char output_filename[MAX_FILENAME_LEN];
+        snprintf(output_filename, sizeof(output_filename), "output/output_mpi_cuda/frame_%04d.jpg", frame_num);
+        save_image(output_filename, output_edges, w, h, 1);
+        log_info("WORKER %d: Saved %s", rank, output_filename);
+
+        // Send edges back to master for other workers
+        int dims[2] = {w, h};
+        MPI_Send(dims, 2, MPI_INT, 0, TAG_EDGE_DIMS, MPI_COMM_WORLD);
+        MPI_Send(task, MAX_FILENAME_LEN, MPI_CHAR, 0, TAG_EDGE_DIMS, MPI_COMM_WORLD);
+        MPI_Send(output_edges, w * h, MPI_UNSIGNED_CHAR, 0, TAG_EDGE_DATA, MPI_COMM_WORLD);
+        log_info("WORKER %d: Sent edges for frame %d to master", rank, frame_num);
+
+        // Update state
+        current_frame_num = frame_num;
+        free(img);
+        free(output_img);
+    }
+    
+    if (prev_edge) free(prev_edge);
+}--- END FILE: src/worker_cuda.c ---
+
+--- START FILE: Makefile ---
+# ===========================
+# Compiler & Flags
+# ===========================
+CC      = mpicc
+NVCC    = nvcc
+CFLAGS  = -O2 -Wall
+LDFLAGS = -lcudart -lm
+INCLUDES = -Iinclude
+
+# ===========================
+# Directories
+# ===========================
+SRC_DIR = src
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
+
+# Ensure build dir exists
+$(shell mkdir -p $(OBJ_DIR))
+
+# ===========================
+# Common Object Rules
+# ===========================
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/cuda_filter.o: $(SRC_DIR)/cuda_filter.cu
+	$(NVCC) -c $< -o $@ $(INCLUDES)
+
+# ===========================
+# Version 1: Serial (no MPI, no CUDA)
+# ===========================
+SERIAL_OBJS = $(OBJ_DIR)/main_serial.o $(OBJ_DIR)/frame_io_serial.o $(OBJ_DIR)/utils_serial.o
+
+serial: $(SERIAL_OBJS)
+	$(CC) -o exec_serial $^ -lm
+
+$(OBJ_DIR)/frame_io_serial.o: $(SRC_DIR)/frame_io.c
+	$(CC) -c $< -o $@ $(INCLUDES) -O2 -Wall
+
+$(OBJ_DIR)/utils_serial.o: $(SRC_DIR)/utils.c
+	$(CC) -c $< -o $@ $(INCLUDES) -O2 -Wall
+
+$(OBJ_DIR)/main_serial.o: $(SRC_DIR)/main_serial.c
+	$(CC) -c $< -o $@ $(INCLUDES) -O2 -Wall
+
+# ===========================
+# Version 2: MPI Only
+# ===========================
+MPI_ONLY_OBJS = $(OBJ_DIR)/main_mpi.o $(OBJ_DIR)/frame_io.o $(OBJ_DIR)/utils.o
+
+mpi_only: $(MPI_ONLY_OBJS)
+	$(CC) -o exec_mpi_only $^ -lm
+
+# ===========================
+# Version 3: CUDA Only
+# ===========================
+CUDA_ONLY_OBJS = \
+	$(OBJ_DIR)/main_cuda.o \
+	$(OBJ_DIR)/frame_io.o \
+	$(OBJ_DIR)/utils.o \
+	$(OBJ_DIR)/cuda_filter.o
+
+cuda_only: $(CUDA_ONLY_OBJS)
+	$(CC) -o exec_cuda_only $^ $(LDFLAGS)
+
+# ===========================
+# Version 4: MPI + CUDA (your current)
+# ===========================
+FULL_OBJS = \
+	$(OBJ_DIR)/main_mpi_cuda.o \
+	$(OBJ_DIR)/master.o \
+	$(OBJ_DIR)/worker_cuda.o \
+	$(OBJ_DIR)/frame_io.o \
+	$(OBJ_DIR)/task_queue.o \
+	$(OBJ_DIR)/utils.o \
+	$(OBJ_DIR)/cuda_filter.o
+
+full: $(FULL_OBJS)
+	$(CC) -o exec_full $^ $(LDFLAGS)
+
+# ===========================
+# Version 5: CUDA-aware MPI (ambitious)
+# ===========================
+MPI_CUDA_AWARE_OBJS = $(FULL_OBJS)  # may change later
+
+cuda_aware: $(MPI_CUDA_AWARE_OBJS)
+	$(CC) -o cuda_aware_exec $^ $(LDFLAGS)
+
+# ===========================
+# Cleanup
+# ===========================
+.PHONY: clean serial_clean mpi_clean full_clean cuda_clean
+
+clean:
+	rm -rf $(OBJ_DIR)/*.o exec_serial exec_mpi_only exec_cuda_only exec_full cuda_aware_exec
+
+serial_clean:
+	rm -f exec_serial $(SERIAL_OBJS)
+
+mpi_clean:
+	rm -f exec_mpi_only exec_full cuda_aware_exec
+
+cuda_clean:
+	rm -f exec_cuda_only
+--- END FILE: Makefile ---
+
+--- START FILE: project_setup.sh ---
+#!/usr/bin/env bash
+
+set -e # Exit immediately if a command exits with a non-zero status.
+
+echo ""
+echo "--- MPI-CUDA Video Project Setup Script (Diagnostic Version) ---"
+
+VENV_DIR="venv"
+
+echo "[PYTHON] Ensuring a clean virtual environment '$VENV_DIR' with --system-site-packages..."
+if [ -d "$VENV_DIR" ]; then
+  echo "[PYTHON] Removing existing virtual environment '$VENV_DIR'..."
+  rm -rf "$VENV_DIR"
+fi
+
+echo "[PYTHON] Identifying Nix Python interpreter..."
+NIX_PYTHON_PATH=$(which python3)
+if [ -z "$NIX_PYTHON_PATH" ]; then
+    echo "[ERROR] Could not determine Nix Python path. Exiting."
+    exit 1
+fi
+echo "[PYTHON] Nix Python is: $NIX_PYTHON_PATH"
+echo "[PYTHON] Nix Python version: $($NIX_PYTHON_PATH --version)"
+
+echo "[PYTHON] Creating Python virtual environment '$VENV_DIR' using '$NIX_PYTHON_PATH' with --system-site-packages..."
+"$NIX_PYTHON_PATH" -m venv "$VENV_DIR" --system-site-packages
+echo "[PYTHON] Virtual environment created."
+
+echo "[PYTHON] Checking '$VENV_DIR/pyvenv.cfg'..."
+if [ -f "$VENV_DIR/pyvenv.cfg" ]; then
+    cat "$VENV_DIR/pyvenv.cfg"
+    if grep -q "include-system-site-packages = true" "$VENV_DIR/pyvenv.cfg"; then
+        echo "[PYTHON] '$VENV_DIR/pyvenv.cfg' includes system site packages."
+    else
+        echo "[PYTHON] WARNING: '$VENV_DIR/pyvenv.cfg' DOES NOT specify include-system-site-packages = true. This is a problem!"
+    fi
+else
+    echo "[PYTHON] WARNING: '$VENV_DIR/pyvenv.cfg' not found!"
+fi
+
+echo "[PYTHON] Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+echo "[PYTHON] Python interpreter in venv: $(which python3)"
+echo "[PYTHON] Python version in venv: $(python3 --version)"
+
+echo "[PYTHON] Displaying sys.path from within activated venv..."
+python3 -c "import sys; import pprint; pprint.pprint(sys.path)"
+
+echo "[PYTHON] Checking access to Nix-provided packages within activated venv..."
+sleep 1 # Give a moment for activation
+echo "  Attempting to import cv2..."
+python3 -c "import cv2; print(f'cv2 version: {cv2.__version__}')" || echo "  cv2: Import failed."
+echo "  Attempting to import numpy..."
+python3 -c "import numpy; print(f'numpy version: {numpy.__version__}')" || echo "  numpy: Import failed."
+echo "  Attempting to import pyparsing..."
+python3 -c "import pyparsing; print(f'pyparsing version: {pyparsing.__version__}')" || echo "  pyparsing: Import failed."
+
+
+echo "[PYTHON] Upgrading pip in venv..."
+pip install --upgrade pip
+
+if [ -f "requirements.txt" ]; then
+  echo "[PYTHON] Installing packages from requirements.txt..."
+  echo "         Reminder: 'numpy', 'opencv-python', and 'pyparsing' should ideally be"
+  echo "         REMOVED from requirements.txt to use the stable Nix-provided versions."
+  pip install -r requirements.txt
+else
+  echo "[PYTHON] requirements.txt not found. Skipping 'pip install -r requirements.txt'."
+fi
+
+if python3 -c "import sys; sys.exit(0 if 'pyparsing' in sys.modules else 1)" || python3 -c "import pyparsing" &> /dev/null; then
+    echo "[PYTHON] 'pyparsing' is accessible. Attempting to install 'latest' package..."
+    pip install latest
+    echo "[PYTHON] 'latest' package installation attempted."
+else
+    echo "[PYTHON] WARNING: 'pyparsing' is NOT accessible in the venv after potential requirements install. Cannot reliably build 'latest'."
+fi
+echo "[PYTHON] Python environment setup complete."
+
+FRAMES_DIR="frames"
+OUTPUT_DIR="output"
+BASH_SCRIPTS_DIR="bash_scripts"
+echo "[PROJECT] Ensuring directory structure..."
+mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR"
+echo "[PROJECT] '$FRAMES_DIR' and '$OUTPUT_DIR' directories ensured."
+
+if [ -d "$BASH_SCRIPTS_DIR" ]; then
+  echo "[PROJECT] Making bash scripts in '$BASH_SCRIPTS_DIR/' executable..."
+  chmod +x "$BASH_SCRIPTS_DIR"/*.sh
+  echo "[PROJECT] Bash scripts are now executable."
+else
+  echo "[WARN] '$BASH_SCRIPTS_DIR' directory not found."
+fi
+
+VIDEO_FILE_CANDIDATE=$(find . -maxdepth 1 -iname "*.mp4" -print -quit 2>/dev/null)
+if [ -n "$VIDEO_FILE_CANDIDATE" ]; then
+    echo "[PROJECT] Found a video file: '$VIDEO_FILE_CANDIDATE'."
+else
+    echo "[WARN] No .mp4 video found in project root."
+fi
+
+echo ""
+echo "--- Setup Script Finished ---"
+echo "Review the diagnostic output above, especially sys.path and import attempts."
+echo "Next steps:"
+echo "1. CRITICAL: Ensure 'numpy', 'opencv-python', 'pyparsing' are NOT in 'requirements.txt'."
+echo "2. Add your MP4 video if needed."
+echo "3. The venv should be active. If not: source $VENV_DIR/bin/activate"
+echo "4. Try: python3 src/extract_frames.py"--- END FILE: project_setup.sh ---
+
+--- START FILE: run_all.sh ---
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MPI+CUDA Video Pipeline: Runner Using bash_scripts/*.sh
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Colors
+RED=$(printf '\033[31m')
+GREEN=$(printf '\033[32m')
+BLUE=$(printf '\033[34m')
+YELLOW=$(printf '\033[33m')
+RESET=$(printf '\033[0m')
+
+# Paths
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS="$ROOT/bash_scripts"
+LOGROOT="$ROOT/logs"
+TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+LOGDIR="$LOGROOT/run_$TIMESTAMP"
+mkdir -p "$LOGDIR"
+
+# Helper to print bold-ish timestamped messages
+log() {
+  echo -e "[${BLUE}$(date +'%H:%M:%S')${RESET}] $*"
+}
+
+# Helper to time & log each step
+time_step() {
+  local desc="$1"; shift
+  local slug
+  slug="$(echo "$desc" | tr ' [:upper:]' '_[:lower:]')"
+  log "→ ${YELLOW}$desc${RESET}"
+  local start end
+  start=$(date +%s)
+  if ! bash -c "$*" 2>&1 | tee "$LOGDIR/${slug}.log"; then
+    echo -e "${RED}✖ $desc failed. See log:${RESET} $LOGDIR/${slug}.log"
+    exit 1
+  fi
+  end=$(date +%s)
+  log "✔ $desc completed in $((end - start))s"
+  echo
+}
+
+# ─── Step 1: Build all binaries ────────────────────────────────────────────────
+time_step "Build all executable targets" "make -j\$(nproc) serial mpi_only cuda_only full"
+
+# ─── Step 2: Patch root binaries for NixOS ────────────────────────────────────
+time_step "Patch binaries for NixOS stdenv" '
+  # find the loader & lib dirs
+  LOADER=$(find /nix/store -type f -path "*-glibc-*/lib/ld-linux-x86-64.so.2" | head -n1)
+  GLIBC_LIB=$(dirname "$LOADER")
+  MPI_LIB=$(dirname "$(find /nix/store -type f -path "*openmpi-*/lib/libmpi.so" | head -n1)")
+  CUDART_LIB=$(dirname "$(find /nix/store -type f -path "*cudatoolkit-*/lib/libcudart.so"* | head -n1)")
+  # patch each binary in project root
+  for BIN in exec_serial exec_mpi_only exec_cuda_only exec_full; do
+    FULL=\"$ROOT/\$BIN\"
+    patchelf --set-interpreter \"$LOADER\" \
+             --set-rpath \"$GLIBC_LIB:$MPI_LIB:$CUDART_LIB\" \
+             \"\$FULL\"
+  done
+'
+
+# ─── Step 3: Run each version via your bash_scripts ──────────────────────────
+
+time_step "Version 1: Serial"        "bash \"$SCRIPTS/v1_serial.sh\""
+time_step "Version 2: MPI-only"      "bash \"$SCRIPTS/v2_mpi.sh\""
+time_step "Version 3: CUDA-only"     "bash \"$SCRIPTS/v3_cuda.sh\""
+time_step "Version 4: MPI+CUDA"      "bash \"$SCRIPTS/v4_full.sh\""
+
+# ─── Done! ─────────────────────────────────────────────────────────────────────
+log "${GREEN}✅ All steps completed successfully!${RESET}"
+log "  • Logs directory: $LOGDIR"
+exit 0
+--- END FILE: run_all.sh ---
+
+--- START FILE: scrape_project.sh ---
+#!/usr/bin/env bash
+
+# Define the list of files and directories provided.
+# In a real scenario, you might get this from a file or command output.
+# This script assumes it's running in the root directory where these paths are valid.
+FILE_ENTRIES=$(cat << 'EOF'
+bash_scripts
+bash_scripts/run_full_cluster.sh
+bash_scripts/v1_serial.sh
+bash_scripts/v2_mpi.sh
+bash_scripts/v3_cuda.sh
+bash_scripts/v4_full.sh
+build/obj
+build/obj/cuda_filter.o
+build/obj/frame_io_serial.o
+build/obj/frame_io.o
+build/obj/main_cuda.o
+build/obj/main_mpi_cuda.o
+build/obj/main_serial.o
+build/obj/master.o
+build/obj/task_queue.o
+build/obj/utils_serial.o
+build/obj/utils.o
+build/obj/worker_cuda.o
+exec
+exec/exec_cuda_only
+exec/exec_full
+exec/exec_mpi_only
+exec/exec_serial
+frames
+include
+include/cuda_filter.h
+include/cuda_segmentation.h
+include/frame_io.h
+include/stb_image_write.h
+include/stb_image.h
+include/task_queue.h
+include/utils.h
+logs
+output
+output/output_mpi
+output/output_mpi_cuda
+src
+src/cuda_filter.cu
+src/extract_frames.py
+src/frame_io_serial.c
+src/frame_io.c
+src/main_cuda.c
+src/main_mpi_cuda.c
+src/main_mpi.c
+src/main_serial.c
+src/master.c
+src/task_queue.c
+src/utils.c
+src/worker_cuda.c
+venv
+.gitignore
+cappy.mp4
+cappy.mp4:Zone.Identifier
+CLEANING...
+COMPILING
+cuda_filter.o
+exec_cuda
+exec_cuda_only
+exec_full
+exec_serial
+frame_io.o
+main_mpi_cuda.o
+Makefile
+master.o
+myhost.txt
+output_serial.mp4
+panda.mp4:Zone.Identifier
+project_setup.sh
+project_snapshot.txt
+QUICKSTART.md
+README.md
+requirements.txt
+run_all.sh
+scrape_project.sh
+shell.nix
+SIMPLE_INSTRUCTION.md
+task_queue.o
+test_segment
+test_segment_label
+test_segment.o
+utils.o
+worker_cuda.o
+EOF
+)
+
+MAX_LINES=250
+
+echo "$FILE_ENTRIES" | while IFS= read -r entry; do
+    # Trim potential leading/trailing whitespace from the entry
+    entry=$(echo "$entry" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+    # Skip if entry is empty after trimming
+    if [ -z "$entry" ]; then
+        continue
+    fi
+
+    # 1. Check if it's an actual file on the filesystem
+    #    This will filter out directory names like 'src', 'include', 'build/obj'
+    #    and also placeholder text like 'CLEANING...', 'COMPILING'
+    if [ ! -f "$entry" ]; then
+        # For debugging: echo "Skipping non-file or non-existent: $entry" >&2
+        continue
+    fi
+
+    # 2. Exclude specific directories, file types, and individual files
+    #    we know are not relevant source code.
+    if [[ "$entry" == build/obj/* ]] || \
+       [[ "$entry" == exec/* ]] || \
+       [[ "$entry" == *.o ]] || \
+       [[ "$entry" == *.mp4 ]] || \
+       [[ "$entry" == *.mp4:Zone.Identifier ]] || \
+       [[ "$entry" == *.txt ]] || \
+       [[ "$entry" == *.md ]] || \
+       [[ "$entry" == ".gitignore" ]] || \
+       [[ "$entry" == "shell.nix" ]] || \
+       [[ "$entry" == "cappy.mp4:Zone.Identifier" ]] || \
+       [[ "$entry" == "panda.mp4:Zone.Identifier" ]]; then
+        # For debugging: echo "Skipping excluded pattern: $entry" >&2
+        continue
+    fi
+
+    # 3. Identify relevant source code files by extension or specific name
+    is_source_code=false
+    case "$entry" in
+        *.c|*.h|*.cu|*.py|*.sh) # Common source/script extensions
+            is_source_code=true
+            ;;
+        Makefile) # Specific filename
+            is_source_code=true
+            ;;
+        # Add other relevant extensions if needed, e.g., *.cpp, *.java, *.js
+        *)
+            # For debugging: echo "Skipping non-source extension: $entry" >&2
+            ;;
+    esac
+
+    if [ "$is_source_code" = true ]; then
+        echo "--- START FILE: $entry ---"
+        # Use head to get up to MAX_LINES.
+        # If file has fewer lines, head will just output all of them.
+        head -n "$MAX_LINES" "$entry"
+        echo "--- END FILE: $entry ---"
+        echo "" # Add a blank line for better readability between files
+    fi
+done
+
+echo "Scraping complete."--- END FILE: scrape_project.sh ---
+
+Scraping complete.
