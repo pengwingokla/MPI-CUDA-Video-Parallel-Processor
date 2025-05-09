@@ -1,0 +1,8 @@
+patchelf: getting info about '/exec/exec_serial': No such file or directory
+patchelf: getting info about '/exec/exec_serial': No such file or directory
+patchelf: getting info about '/exec/exec_mpi_only': No such file or directory
+patchelf: getting info about '/exec/exec_mpi_only': No such file or directory
+patchelf: getting info about '/exec/exec_cuda_only': No such file or directory
+patchelf: getting info about '/exec/exec_cuda_only': No such file or directory
+patchelf: getting info about '/exec/exec_full': No such file or directory
+patchelf: getting info about '/exec/exec_full': No such file or directory

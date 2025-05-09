@@ -1,0 +1,4 @@
+mpicc -o exec_serial build/obj/main_serial.o build/obj/frame_io_serial.o build/obj/utils_serial.o -lm
+mpicc -o exec_mpi_only build/obj/main_mpi.o build/obj/frame_io.o build/obj/utils.o -lm
+mpicc -o exec_cuda_only build/obj/main_cuda.o build/obj/frame_io.o build/obj/utils.o build/obj/cuda_filter.o -lcudart -lm
+mpicc -o exec_full build/obj/main_mpi_cuda.o build/obj/master.o build/obj/worker_cuda.o build/obj/frame_io.o build/obj/task_queue.o build/obj/utils.o build/obj/cuda_filter.o -lcudart -lm

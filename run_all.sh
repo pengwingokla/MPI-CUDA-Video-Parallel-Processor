@@ -2,95 +2,73 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  MPI+CUDA Video Pipeline: End-to-End Runner
+#  MPI+CUDA Video Pipeline: Runner Using bash_scripts/*.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Colors for pretty output
+# Colors
 RED=$(printf '\033[31m')
 GREEN=$(printf '\033[32m')
 BLUE=$(printf '\033[34m')
 YELLOW=$(printf '\033[33m')
 RESET=$(printf '\033[0m')
 
-# ─── Configuration ────────────────────────────────────────────────────────────
+# Paths
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VIDEO="${1:-panda.mp4}"
+SCRIPTS="$ROOT/bash_scripts"
+LOGROOT="$ROOT/logs"
 TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
-LOGDIR="$ROOT/logs/run_${TIMESTAMP}"
-FRAMES="$ROOT/frames"
-OUT="$ROOT/output"
+LOGDIR="$LOGROOT/run_$TIMESTAMP"
+mkdir -p "$LOGDIR"
 
-mkdir -p "$LOGDIR" "$FRAMES" "$OUT"
-
+# Helper to print bold-ish timestamped messages
 log() {
   echo -e "[${BLUE}$(date +'%H:%M:%S')${RESET}] $*"
 }
 
-# ─── Utility: time a step and log duration ─────────────────────────────────────
+# Helper to time & log each step
 time_step() {
-  local desc=$1; shift
-  local slug=$(echo "$desc" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
-  log "→ ${YELLOW}${desc}${RESET}"
-  local start=$(date +%s)
-  if ! "$@" 2>&1 | tee "$LOGDIR/${slug}.log"; then
-    echo -e "${RED}✖ Step failed: $desc${RESET}"
+  local desc="$1"; shift
+  local slug
+  slug="$(echo "$desc" | tr ' [:upper:]' '_[:lower:]')"
+  log "→ ${YELLOW}$desc${RESET}"
+  local start end
+  start=$(date +%s)
+  if ! bash -c "$*" 2>&1 | tee "$LOGDIR/${slug}.log"; then
+    echo -e "${RED}✖ $desc failed. See log:${RESET} $LOGDIR/${slug}.log"
     exit 1
   fi
-  local end=$(date +%s)
-  log "✔ ${desc} completed in $((end - start))s"
+  end=$(date +%s)
+  log "✔ $desc completed in $((end - start))s"
   echo
 }
 
-# ─── Step 0: Build all executables ──────────────────────────────────────────────
-time_step "Building all executables" make -j"$(nproc)"
+# ─── Step 1: Build all binaries ────────────────────────────────────────────────
+time_step "Build all executable targets" "make -j\$(nproc) serial mpi_only cuda_only full"
 
-# ─── Step 1: Extract frames ────────────────────────────────────────────────────
-if compgen -G "$FRAMES/frame_*.jpg" >/dev/null; then
-  count=$(ls "$FRAMES"/frame_*.jpg | wc -l)
-  log "→ ${GREEN}Found existing frames:${RESET} $count"
-else
-  time_step "Extracting frames" ffmpeg -y -i "$ROOT/$VIDEO" "$FRAMES/frame_%04d.jpg"
-  count=$(ls "$FRAMES"/frame_*.jpg | wc -l)
-  log "→ ${GREEN}Extracted frames:${RESET} $count"
-fi
+# ─── Step 2: Patch root binaries for NixOS ────────────────────────────────────
+time_step "Patch binaries for NixOS stdenv" '
+  # find the loader & lib dirs
+  LOADER=$(find /nix/store -type f -path "*-glibc-*/lib/ld-linux-x86-64.so.2" | head -n1)
+  GLIBC_LIB=$(dirname "$LOADER")
+  MPI_LIB=$(dirname "$(find /nix/store -type f -path "*openmpi-*/lib/libmpi.so" | head -n1)")
+  CUDART_LIB=$(dirname "$(find /nix/store -type f -path "*cudatoolkit-*/lib/libcudart.so"* | head -n1)")
+  # patch each binary in project root
+  for BIN in exec_serial exec_mpi_only exec_cuda_only exec_full; do
+    FULL=\"$ROOT/\$BIN\"
+    patchelf --set-interpreter \"$LOADER\" \
+             --set-rpath \"$GLIBC_LIB:$MPI_LIB:$CUDART_LIB\" \
+             \"\$FULL\"
+  done
+'
 
-# ─── Step 2: Serial version ─────────────────────────────────────────────────────
-mkdir -p "$OUT/serial"
-time_step "Running Serial" "$ROOT/exec/exec_serial" "$FRAMES" "$OUT/serial"
-time_step "Serial → Making video" \
-  ffmpeg -y -framerate 30 -i "$OUT/serial/frame_%04d.jpg" \
-    -c:v libx264 -pix_fmt yuv420p "$OUT/serial.mp4"
+# ─── Step 3: Run each version via your bash_scripts ──────────────────────────
 
-# ─── Step 3: MPI-only version ──────────────────────────────────────────────────
-mkdir -p "$OUT/mpi"
-time_step "Running MPI-only" \
-  mpirun --oversubscribe -np 4 "$ROOT/exec/exec_mpi_only" "$FRAMES" "$OUT/mpi"
-time_step "MPI-only → Making video" \
-  ffmpeg -y -framerate 30 -i "$OUT/mpi/frame_%04d.jpg" \
-    -c:v libx264 -pix_fmt yuv420p "$OUT/mpi.mp4"
-
-# ─── Step 4: CUDA-only version ─────────────────────────────────────────────────
-mkdir -p "$OUT/cuda"
-time_step "Running CUDA-only" "$ROOT/exec/exec_cuda_only" "$FRAMES" "$OUT/cuda"
-time_step "CUDA-only → Making video" \
-  ffmpeg -y -framerate 30 -i "$OUT/cuda/frame_%04d.jpg" \
-    -c:v libx264 -pix_fmt yuv420p "$OUT/cuda.mp4"
-
-# ─── Step 5: MPI+CUDA version ───────────────────────────────────────────────────
-mkdir -p "$OUT/mpi_cuda"
-time_step "Running MPI+CUDA" \
-  mpirun --oversubscribe -np 8 "$ROOT/exec/exec_full" "$FRAMES" "$OUT/mpi_cuda"
-time_step "MPI+CUDA → Making video" \
-  ffmpeg -y -framerate 30 -i "$OUT/mpi_cuda/frame_%04d.jpg" \
-    -c:v libx264 -pix_fmt yuv420p "$OUT/mpi_cuda.mp4"
+time_step "Version 1: Serial"        "bash \"$SCRIPTS/v1_serial.sh\""
+time_step "Version 2: MPI-only"      "bash \"$SCRIPTS/v2_mpi.sh\""
+time_step "Version 3: CUDA-only"     "bash \"$SCRIPTS/v3_cuda.sh\""
+time_step "Version 4: MPI+CUDA"      "bash \"$SCRIPTS/v4_full.sh\""
 
 # ─── Done! ─────────────────────────────────────────────────────────────────────
 log "${GREEN}✅ All steps completed successfully!${RESET}"
-log "  • Logs:   $LOGDIR"
-log "  • Videos:"
-log "      Serial:    $OUT/serial.mp4"
-log "      MPI-only:  $OUT/mpi.mp4"
-log "      CUDA-only: $OUT/cuda.mp4"
-log "      MPI+CUDA:  $OUT/mpi_cuda.mp4"
-
+log "  • Logs directory: $LOGDIR"
 exit 0
