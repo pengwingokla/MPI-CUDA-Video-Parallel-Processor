@@ -77,45 +77,23 @@ Once all frames are processed, `FFmpeg` can be used to stitch them into a video:
 ffmpeg -framerate 30 -i output/frame_%04d.jpg -c:v libx264 output.mp4
 ```
 ## Installation & Build
-Install Required Packages
-```bash
-sudo apt update
-sudo apt install build-essential libopenmpi-dev openmpi-bin ffmpeg python3 python3-pip
-pip install opencv-python
-```
-Extract Video Frames
-```
-python3 extract_frames.py input.mp4
-```
-Execution via Bash Scripts
-```
-chmod +x bash_scripts/v*.sh
-./bash_scripts/v1_serial.sh
-./bash_scripts/v2_cuda.sh
-./bash_scripts/v3_mpi.sh
-./bash_scripts/v4_mpi_cuda.sh
-```
-Each script:
+#### Please visit `SIMPLE_INSTRUCTION.md` for a more straightforward instrction
 
-- Compiles the code.
-- Runs the version.
-- Uses ffmpeg to generate a video.
-
-##  Build Instructions
-
-### Version 1: Serial (no MPI, no CUDA)
+##  Build
+To elaborate further, these are the commands in the bash scripts. Note that this only works after frames from the video were extracted and contained in the `/frames` folder.
+#### Version 1: Serial (no MPI, no CUDA)
 ```
 ./exec_serial
 ```
-### Version 2: MPI-only
+#### Version 2: MPI-only
 ```
 .mpirun -np 4 ./exec_mpi_only
 ```
-### Version 3: CUDA-only
+#### Version 3: CUDA-only
 ```
 ./exec_cuda_only
 ```
-### Version 4: MPI + CUDA (multi-node or multi-GPU)
+#### Version 4: MPI + CUDA (multi-node or multi-GPU)
 ```
 mpirun -np 8 ./exec_full
 ```
