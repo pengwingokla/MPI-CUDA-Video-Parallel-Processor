@@ -22,5 +22,5 @@ mpirun -np 8 \
     --allow-run-as-root \
     --output-filename output/output_mpi/logs ./exec_mpi_only
 
-# echo "==> CONVERTING FRAMES TO VIDEO..."
-# ffmpeg -y -framerate 30 -i output/output_mpi/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_mpi_only.mp4
+echo "==> CONVERTING FRAMES TO VIDEO..."
+ffmpeg -y -framerate 30 -i output/output_mpi/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_mpi_only.mp4
