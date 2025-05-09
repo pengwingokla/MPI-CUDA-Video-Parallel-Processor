@@ -8,6 +8,8 @@ pip install -r requirements.txt
 
 echo "==> EXTRACTING FRAMES..."
 python3 src/extract_frames.py
+mkdir output/
+mkdir output/output_mpi_cuda/
 
 echo "==> COMPILING MPI+CUDA VERSION..."
 make full
