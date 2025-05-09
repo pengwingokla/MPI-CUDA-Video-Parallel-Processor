@@ -2,6 +2,14 @@
 
 set -e
 
+echo "==> SETTING UP PYTHON VIRTUAL ENVIRONMENT..."
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+echo "==> EXTRACTING FRAMES..."
+python3 src/extract_frames.py
+
 echo "==> COMPILING CUDA-ONLY VERSION..."
 make cuda_only
 
