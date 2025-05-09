@@ -1,0 +1,3 @@
+make: Entering directory '/home/myko/MPI-CUDA-Video-Parallel-Processor'
+mpicc -o exec_full build/obj/main_mpi_cuda.o build/obj/master.o build/obj/worker_cuda.o build/obj/frame_io.o build/obj/task_queue.o build/obj/utils.o build/obj/cuda_filter.o -lcudart -lm
+make: Leaving directory '/home/myko/MPI-CUDA-Video-Parallel-Processor'

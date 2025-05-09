@@ -1,0 +1,4 @@
+make: Entering directory '/home/myko/MPI-CUDA-Video-Parallel-Processor'
+mpicc -O2 -Wall -Iinclude -c src/main_mpi.c -o build/obj/main_mpi.o
+mpicc -o exec_mpi_only build/obj/main_mpi.o build/obj/frame_io.o build/obj/utils.o -lm
+make: Leaving directory '/home/myko/MPI-CUDA-Video-Parallel-Processor'

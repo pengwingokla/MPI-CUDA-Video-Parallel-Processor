@@ -1,0 +1,67 @@
+Friend's Project: Multi-Machine Full Suite Test Orchestration Log - Session: friends_multirun_20250509_142405_nixos
+[2025-05-09 14:24:05] Starting Friend's Project Full Suite Test Script...
+[2025-05-09 14:24:05] Session ID: friends_multirun_20250509_142405_nixos
+[2025-05-09 14:24:05] Logging to Directory: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos
+[2025-05-09 14:24:05] Project Root (Friend's): /home/myko/MPI-CUDA-Video-Parallel-Processor
+[2025-05-09 14:24:05] Target hosts configured:
+[2025-05-09 14:24:05]   - myko@192.168.1.158 50
+[2025-05-09 14:24:05]   - myko@192.168.1.97 50
+[2025-05-09 14:24:05] --- Running Initial Cluster-Wide Setup for Friend's Project ---
+[2025-05-09 14:24:06] --- Phase 1: SSH Setup ---
+[2025-05-09 14:24:06] Checking SSH to myko@192.168.1.158 from myko@192.168.1.158...
+[2025-05-09 14:24:06] SUCCESS: Passwordless SSH to myko@192.168.1.158.
+[2025-05-09 14:24:06] Checking SSH to myko@192.168.1.97 from myko@192.168.1.158...
+[2025-05-09 14:24:07] SUCCESS: Passwordless SSH to myko@192.168.1.97.
+[2025-05-09 14:24:07] --- SSH Setup Phase Completed ---
+[2025-05-09 14:24:07] Combined CUDA arch flags for builds: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 
+[2025-05-09 14:24:07] --- Preparing Input Frames (on master node) ---
+[2025-05-09 14:24:07] Found video cappy.mp4. Extracting frames using /home/myko/MPI-CUDA-Video-Parallel-Processor/src/extract_frames.py to /home/myko/MPI-CUDA-Video-Parallel-Processor/frames/
+[2025-05-09 14:24:38] Frame extraction complete. See /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos/frame_extraction.log.
+[2025-05-09 14:24:38] --- Syncing Project Root to Worker Nodes (includes frames, excludes build/exec/output initially) ---
+[2025-05-09 14:24:38] Initial sync of /home/myko/MPI-CUDA-Video-Parallel-Processor/ to myko@192.168.1.97:/home/myko/MPI-CUDA-Video-Parallel-Processor/
+[2025-05-09 14:24:39]   Executing rsync (Log: friends_multirun_20250509_142405_nixos/rsync_initial_to_192.168.1.97.log)...
+[2025-05-09 14:24:41] SUCCESS: Initial sync to myko@192.168.1.97.
+[2025-05-09 14:24:41] --- Initial Sync Phase Completed ---
+[2025-05-09 14:24:41] --- Creating MPI Hostfile ---
+[2025-05-09 14:24:41] MPI Hostfile: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos/mpi_cluster_hosts.txt
+192.168.1.158 slots=1
+192.168.1.97 slots=1
+[2025-05-09 14:24:41] --- MPI Hostfile Creation Phase Completed ---
+[2025-05-09 14:24:41] --- Initial Cluster-Wide Setup Completed ---
+[2025-05-09 14:24:41] --- Starting Friend's Project Test Suite ---
+[2025-05-09 14:24:41] -- Building Target: serial (Executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_serial) --
+[2025-05-09 14:24:41]   Ensuring directory for executable exists: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec
+[2025-05-09 14:24:41]   Attempting to remove old executable (if any): /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_serial
+[2025-05-09 14:24:41]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' serial (Log: friends_multirun_20250509_142405_nixos/make_serial.log)
+[2025-05-09 14:24:42]     Build Status for exec_serial: Build OK (make success), but executable '/home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_serial' is MISSING.
+[2025-05-09 14:24:42] === Testing Serial (NP=1) ===
+[2025-05-09 14:24:42] -- Building Target: mpi_only (Executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_mpi_only) --
+[2025-05-09 14:24:42]   Ensuring directory for executable exists: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec
+[2025-05-09 14:24:42]   Attempting to remove old executable (if any): /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_mpi_only
+[2025-05-09 14:24:42]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' mpi_only (Log: friends_multirun_20250509_142405_nixos/make_mpi_only.log)
+[2025-05-09 14:24:42]     Build Status for exec_mpi_only: Build OK (make success), but executable '/home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_mpi_only' is MISSING.
+[2025-05-09 14:24:42] === Testing MPI-Only (NP=1) ===
+[2025-05-09 14:24:42] === Testing MPI-Only (NP=2) ===
+[2025-05-09 14:24:42] -- Building Target: cuda_only (Executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_cuda_only) --
+[2025-05-09 14:24:42]   Ensuring directory for executable exists: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec
+[2025-05-09 14:24:42]   Attempting to remove old executable (if any): /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_cuda_only
+[2025-05-09 14:24:42]   (CUDA Build using HOST_CUDA_ARCH_FLAGS: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 )
+[2025-05-09 14:24:42]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' HOST_CUDA_ARCH_FLAGS='-gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 ' cuda_only (Log: friends_multirun_20250509_142405_nixos/make_cuda_only.log)
+[2025-05-09 14:24:43]     Build Status for exec_cuda_only: Build OK (make success), but executable '/home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_cuda_only' is MISSING.
+[2025-05-09 14:24:43] === Testing CUDA-Only (NP=1) ===
+[2025-05-09 14:24:43] -- Building Target: full (Executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_full) --
+[2025-05-09 14:24:43]   Ensuring directory for executable exists: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec
+[2025-05-09 14:24:43]   Attempting to remove old executable (if any): /home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_full
+[2025-05-09 14:24:43]   (CUDA Build using HOST_CUDA_ARCH_FLAGS: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 )
+[2025-05-09 14:24:43]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' HOST_CUDA_ARCH_FLAGS='-gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 ' full (Log: friends_multirun_20250509_142405_nixos/make_full.log)
+[2025-05-09 14:24:43]     Build Status for exec_full: Build OK (make success), but executable '/home/myko/MPI-CUDA-Video-Parallel-Processor/exec/exec_full' is MISSING.
+[2025-05-09 14:24:43] === Testing MPI+CUDA Full (NP=1) ===
+[2025-05-09 14:24:43] === Testing MPI+CUDA Full (NP=2) ===
+[2025-05-09 14:24:43] --- Friend's Project Test Suite Finished ---
+[2025-05-09 14:24:43] === Summary Table (Friend's Project - Master: nixos, Session: friends_multirun_20250509_142405_nixos) ===
+[2025-05-09 14:24:43] Detailed logs in: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos
+[2025-05-09 14:24:43] CSV summary: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/summary_friends_multi_20250509_142405.csv
+[2025-05-09 14:24:43] --- Friend's Project Full Suite Test Script Finished ---
+[2025-05-09 14:24:43] All logs: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos
+[2025-05-09 14:24:43] CSV: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/summary_friends_multi_20250509_142405.csv
+[2025-05-09 14:24:43] Orchestration log: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142405_nixos/main_orchestration.log

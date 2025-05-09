@@ -17,8 +17,9 @@ INPUT_VIDEO_FILE="cappy.mp4" # Ensure this is in ROOT_DIR
 DEFAULT_USER=$(whoami)
 MASTER_HOSTNAME_SHORT=$(hostname -s)
 # This script should be in <friends_project_root>/bash_scripts/
+# ROOT_DIR is the parent of the 'bash_scripts' directory.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" 
-LOGS_BASE_DIR="$ROOT_DIR/logs"
+LOGS_BASE_DIR="$ROOT_DIR/logs" # Friend's log directory
 mkdir -p "$LOGS_BASE_DIR"
 
 SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -34,7 +35,9 @@ GIT_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 _PARSED_USER=""; _PARSED_HOST=""; _PARSED_ARCH_CODE=""
 COMBINED_CUDA_ARCH_FLAGS_FOR_MAKE=""
 
-EXEC_DIR_REL="exec" # Relative to ROOT_DIR where executables are placed by Makefile
+# **** CORRECTED: Executables are in the project root for friend's project ****
+EXEC_DIR_REL="." 
+
 EXEC_SERIAL="exec_serial"; EXEC_MPI_ONLY="exec_mpi_only"; EXEC_CUDA_ONLY="exec_cuda_only"; EXEC_FULL="exec_full"
 OUTPUT_DIR_REL="output" # Relative to ROOT_DIR
 OUTPUT_SERIAL_FRAMES_DIR_REL="$OUTPUT_DIR_REL/output_serial"
@@ -44,8 +47,6 @@ OUTPUT_FULL_FRAMES_DIR_REL="$OUTPUT_DIR_REL/output_mpi_cuda"
 
 BUILD_SUCCEEDED_GLOBAL=false
 BUILD_MESSAGE_GLOBAL=""
-# This will store the relative path to the make log for the *specific target* that was built.
-# e.g., "session_id/make_serial.log", "session_id/make_full.log"
 MAKE_LOG_REL_PATH_FOR_TARGET_GLOBAL=""
 
 
@@ -84,6 +85,11 @@ run_and_log_command() {
     elif grep -q -E "There are not enough slots available|orted context|named symbol not found|no kernel image is available|cannot open shared object file|Library not found" "$log_file_path"; then log_message "    [⚠ Warning (exit $exit_code) - MPI/CUDA Arch/Lib Issue - see log]"; return 2;
     else log_message "    [✘ Failed (exit $exit_code) – see log]"; return 1; fi
   fi
+}
+# --- ASCII Table Summary ---
+declare -a SUMMARY_FOR_TABLE_FRIENDS 
+add_to_table_summary_friends() { 
+    SUMMARY_FOR_TABLE_FRIENDS+=("$1"$'\t'"$2"$'\t'"$3"$'\t'"$4"$'\t'"$5")
 }
 _print_table_border_char() { local l="$1" m="$2" r="$3"; local c_arr=(25 5 12 45 22); printf "%s" "$l"; for i in "${!c_arr[@]}"; do local w=${c_arr[i]}; local seg=$((w + 2)); for ((j=0;j<seg;j++));do printf '═';done; if((i<${#c_arr[@]}-1));then printf "%s" "$m";else printf "%s\n" "$r";fi;done;}
 _center_text_in_cell() { local width=$1; local text=$2; if ((${#text}>width));then text="${text:0:$((width-3))}...";fi; local tl=${#text};local pt=$((width-tl));local ps=$((pt/2));local pe=$((pt-ps));printf "%*s%s%*s" $ps "" "$text" $pe "";}
@@ -130,15 +136,17 @@ initial_cluster_wide_setup() {
     
     # Prep: Input Frames
     log_message "--- Preparing Input Frames (on master node) ---"
+    local frames_dir_abs_path="$ROOT_DIR/frames" 
+    mkdir -p "$frames_dir_abs_path" 
+
     if [[ -f "$ROOT_DIR/$INPUT_VIDEO_FILE" ]]; then
-        log_message "Found video $INPUT_VIDEO_FILE. Extracting frames using $ROOT_DIR/src/extract_frames.py..."
+        log_message "Found video $INPUT_VIDEO_FILE. Extracting frames using $ROOT_DIR/src/extract_frames.py to $frames_dir_abs_path/"
         local frame_extraction_log="$SESSION_LOG_DIR/frame_extraction.log"
-        # Using python3 directly, assuming nix-shell provides necessary packages (cv2)
-        if python3 "$ROOT_DIR/src/extract_frames.py" > "$frame_extraction_log" 2>&1; then
+        if python3 "$ROOT_DIR/src/extract_frames.py" > "$frame_extraction_log" 2>&1; then 
             log_message "Frame extraction complete. See $frame_extraction_log."
-            if [ ! -d "$ROOT_DIR/frames" ] || [ -z "$(ls -A "$ROOT_DIR/frames" 2>/dev/null)" ]; then
-                log_message "ERROR: Frame extraction reported success, but $ROOT_DIR/frames/ is missing or empty. Check $frame_extraction_log."
-                cat "$frame_extraction_log" | tee -a "$ORCHESTRATION_LOG" # Show error in main log too
+            if [ ! -d "$frames_dir_abs_path" ] || [ -z "$(ls -A "$frames_dir_abs_path" 2>/dev/null)" ]; then
+                log_message "ERROR: Frame extraction reported success, but $frames_dir_abs_path is missing or empty. Check $frame_extraction_log."
+                cat "$frame_extraction_log" | tee -a "$ORCHESTRATION_LOG" 
                 exit 1
             fi
         else
@@ -147,9 +155,9 @@ initial_cluster_wide_setup() {
             exit 1
         fi
     else
-        log_message "WARNING: Input video $INPUT_VIDEO_FILE not found in $ROOT_DIR. Assuming frames are already in $ROOT_DIR/frames/."
-        if [ ! -d "$ROOT_DIR/frames" ] || [ -z "$(ls -A "$ROOT_DIR/frames" 2>/dev/null)" ]; then
-             log_message "ERROR: $ROOT_DIR/frames/ directory is missing or empty, and no input video to extract from."
+        log_message "WARNING: Input video $INPUT_VIDEO_FILE not found in $ROOT_DIR. Assuming frames are already in $frames_dir_abs_path."
+        if [ ! -d "$frames_dir_abs_path" ] || [ -z "$(ls -A "$frames_dir_abs_path" 2>/dev/null)" ]; then
+             log_message "ERROR: $frames_dir_abs_path directory is missing or empty, and no input video to extract from."
              exit 1
         fi
     fi
@@ -163,11 +171,10 @@ initial_cluster_wide_setup() {
                 parse_host_info_entry "${HOSTS_INFO[$i_sync_init]}"; local target_alias_sync_init="$_PARSED_USER@$_PARSED_HOST"
                 log_message "Initial sync of $ROOT_DIR/ to $target_alias_sync_init:$ROOT_DIR/"
                 if ! ssh "$target_alias_sync_init" "mkdir -p \"$ROOT_DIR\""; then log_message "ERR: mkdir $ROOT_DIR on $target_alias_sync_init failed."; exit 1; fi
-                local rsync_opts_init="-az --delete --checksum --exclude '.git/' --exclude 'build/' --exclude '*.mp4' --exclude '*.o' --exclude '$EXEC_DIR_REL/' --exclude '$OUTPUT_DIR_REL/'"
-                if [[ "$VERBOSE_RSYNC" == "true" ]]; then rsync_opts_init="-avz --delete --checksum --exclude '.git/' --exclude 'build/' --exclude '*.mp4' --exclude '*.o' --exclude '$EXEC_DIR_REL/' --exclude '$OUTPUT_DIR_REL/'"; fi
+                local rsync_opts_init="-az --delete --checksum --exclude '.git/' --exclude 'build/' --exclude '*.mp4' --exclude '*.o' --exclude '$EXEC_DIR_REL/' --exclude '$OUTPUT_DIR_REL/' --exclude 'logs/' --exclude 'venv/'"
+                if [[ "$VERBOSE_RSYNC" == "true" ]]; then rsync_opts_init="-avz --delete --checksum --exclude '.git/' --exclude 'build/' --exclude '*.mp4' --exclude '*.o' --exclude '$EXEC_DIR_REL/' --exclude '$OUTPUT_DIR_REL/' --exclude 'logs/' --exclude 'venv/'"; fi
                 local rsync_log_init="$SESSION_LOG_DIR/rsync_initial_to_${_PARSED_HOST}.log"
                 log_message "  Executing rsync (Log: $(basename "$SESSION_LOG_DIR")/$(basename "$rsync_log_init"))..."
-                # Ensure log dir exists for rsync log
                 mkdir -p "$(dirname "$rsync_log_init")"
                 if eval "rsync $rsync_opts_init '$ROOT_DIR/' '$target_alias_sync_init:$ROOT_DIR/'" >"$rsync_log_init" 2>&1; then log_message "SUCCESS: Initial sync to $target_alias_sync_init.";
                 else log_message "ERR: Initial rsync to $target_alias_sync_init failed. Check $rsync_log_init."; exit 1; fi
@@ -190,31 +197,42 @@ initial_cluster_wide_setup() {
 # ==============================================================================
 build_patch_and_sync_target() {
     local make_target_name="$1"; local executable_name="$2"; local is_cuda_build="$3"
-    log_message "-- Building Target: $make_target_name (Executable: $ROOT_DIR/$EXEC_DIR_REL/$executable_name) --"
-    local exec_abs_path="$ROOT_DIR/$EXEC_DIR_REL/$executable_name"
+    
+    local exec_abs_path # Will be set based on EXEC_DIR_REL
+    if [[ "$EXEC_DIR_REL" == "." ]]; then
+        exec_abs_path="$ROOT_DIR/$executable_name"
+        log_message "-- Building Target: $make_target_name (Executable: $exec_abs_path) --"
+        log_message "  Ensuring directory for executable exists: $ROOT_DIR (project root)"
+        # No mkdir needed if it's project root, it exists.
+    else
+        exec_abs_path="$ROOT_DIR/$EXEC_DIR_REL/$executable_name"
+        log_message "-- Building Target: $make_target_name (Executable: $exec_abs_path) --"
+        log_message "  Ensuring directory for executable exists: $(dirname "$exec_abs_path")"
+        mkdir -p "$(dirname "$exec_abs_path")"
+    fi
 
-    # Set global path to the make log for this specific target
-    MAKE_LOG_REL_PATH_GLOBAL="$SESSION_ID/make_${make_target_name}.log"
+    MAKE_LOG_REL_PATH_FOR_TARGET_GLOBAL="$SESSION_ID/make_${make_target_name}.log" 
     local current_make_log_abs_path="$SESSION_LOG_DIR/make_${make_target_name}.log"
     
     rm -f "$exec_abs_path" 
-    log_message "  Attempting to remove old executable: $exec_abs_path"
+    log_message "  Attempting to remove old executable (if any): $exec_abs_path"
     
     local make_cmd_build="make -C '$ROOT_DIR' $make_target_name"
-    # Friend's Makefile needs to be updated to use HOST_CUDA_ARCH_FLAGS
-    # e.g. NVCC_FLAGS += $(HOST_CUDA_ARCH_FLAGS)
     if [[ "$is_cuda_build" == "true" && -n "$COMBINED_CUDA_ARCH_FLAGS_FOR_MAKE" ]]; then
         make_cmd_build="make -C '$ROOT_DIR' HOST_CUDA_ARCH_FLAGS='$COMBINED_CUDA_ARCH_FLAGS_FOR_MAKE' $make_target_name"
         log_message "  (CUDA Build using HOST_CUDA_ARCH_FLAGS: $COMBINED_CUDA_ARCH_FLAGS_FOR_MAKE)"
     fi
 
-    log_message "  Executing build: $make_cmd_build (Log: $MAKE_LOG_REL_PATH_GLOBAL)"
-    mkdir -p "$(dirname "$current_make_log_abs_path")" # Ensure log dir exists
-    >$current_make_log_abs_path 
+    log_message "  Executing build: $make_cmd_build (Log: $MAKE_LOG_REL_PATH_FOR_TARGET_GLOBAL)"
+    mkdir -p "$(dirname "$current_make_log_abs_path")"; >"$current_make_log_abs_path" 
+    
+    local build_success_flag_internal=false 
+    local build_message_internal=""
+
     if eval "$make_cmd_build" >> "$current_make_log_abs_path" 2>&1; then
         if [[ -f "$exec_abs_path" ]]; then
-            BUILD_SUCCEEDED_GLOBAL=true; BUILD_MESSAGE_GLOBAL="Build OK"
-            if command -v patchelf &> /dev/null && [[ "$(uname -s)" == "Linux" ]]; then
+            build_success_flag_internal=true; build_message_internal="Build OK"
+            if command -v patchelf &> /dev/null && [[ "$(uname -s)" == "Linux" ]]; then # Simple check for NixOS-like env
                 log_message "  Attempting to patchelf $exec_abs_path for NixOS..."
                 local LOADER_PATH; LOADER_PATH=$(find /nix/store -maxdepth 2 -type f -path "*/lib/ld-linux-x86-64.so.2" -print -quit 2>/dev/null || echo "")
                 local GLIBC_LIB_PATH; GLIBC_LIB_PATH=$(dirname "$LOADER_PATH" 2>/dev/null || echo "")
@@ -231,35 +249,41 @@ build_patch_and_sync_target() {
                     log_message "    Loader: $LOADER_PATH"; log_message "    RPATH: $RPATH_TO_SET"
                     if patchelf --set-interpreter "$LOADER_PATH" --set-rpath "$RPATH_TO_SET" "$exec_abs_path" >> "$current_make_log_abs_path" 2>&1; then
                         log_message "    [✔ patchelf Succeeded for $executable_name]"
-                    else BUILD_MESSAGE_GLOBAL+=" (patchelf failed)"; log_message "    [⚠ patchelf Failed for $executable_name.]"; fi
-                else BUILD_MESSAGE_GLOBAL+=" (patchelf skipped)"; log_message "    [⚠ Could not find all paths for patchelf. Skipping for $executable_name.]"; fi
+                    else build_message_internal+=" (patchelf failed)"; log_message "    [⚠ patchelf Failed for $executable_name.]"; fi
+                else build_message_internal+=" (patchelf skipped)"; log_message "    [⚠ Could not find all paths for patchelf or RPATH empty. Skipping for $executable_name.]"; fi
             fi
-        else BUILD_SUCCEEDED_GLOBAL=false; BUILD_MESSAGE_GLOBAL="Build OK, but $exec_name_fr MISSING"; fi # Corrected variable
-    else local make_exit=$?; BUILD_SUCCEEDED_GLOBAL=false; BUILD_MESSAGE_GLOBAL="Build failed (exit $make_exit)"; fi
+        else build_success_flag_internal=false; build_message_internal="Build OK (make success), but executable '$exec_abs_path' is MISSING."; fi
+    else local make_exit=$?; build_success_flag_internal=false; build_message_internal="Build failed (make exit $make_exit)"; fi
+    
+    BUILD_SUCCEEDED_GLOBAL=$build_success_flag_internal 
+    BUILD_MESSAGE_GLOBAL=$build_message_internal      
     log_message "    Build Status for $executable_name: $BUILD_MESSAGE_GLOBAL"
 
     if [[ "$BUILD_SUCCEEDED_GLOBAL" == "true" && "$USE_SHARED_FILESYSTEM" == "false" && "${#HOSTS_INFO[@]}" -gt 1 ]]; then
-        log_message "  Syncing built $exec_rel_path and critical data to worker nodes..."
+        log_message "  Syncing built $exec_abs_path and critical data (frames) to worker nodes..."
         for i_sync_exec_loop in $(seq 1 $((${#HOSTS_INFO[@]} - 1)) ); do
             parse_host_info_entry "${HOSTS_INFO[$i_sync_exec_loop]}"; local target_alias_sync_exec="$_PARSED_USER@$_PARSED_HOST"
             log_message "    Syncing to $target_alias_sync_exec..."
-            ssh "$target_alias_sync_exec" "mkdir -p \"$(dirname "$exec_abs_path")\"" 
+            # Ensure target exec directory exists based on EXEC_DIR_REL
+            if [[ "$EXEC_DIR_REL" == "." ]]; then
+                 ssh "$target_alias_sync_exec" "mkdir -p '$ROOT_DIR'" # Project root
+            else
+                 ssh "$target_alias_sync_exec" "mkdir -p '$ROOT_DIR/$EXEC_DIR_REL'"
+            fi
+            ssh "$target_alias_sync_exec" "mkdir -p '$ROOT_DIR/frames'" # Also ensure frames dir
+            
             local rsync_exec_log="$SESSION_LOG_DIR/rsync_exec_${executable_name}_to_${_PARSED_HOST}.log"
             mkdir -p "$(dirname "$rsync_exec_log")"
             if rsync -az --checksum "$exec_abs_path" "$target_alias_sync_exec:$exec_abs_path" > "$rsync_exec_log" 2>&1; then log_message "      SUCCESS: Synced $executable_name to $target_alias_sync_exec";
             else log_message "      ERROR: Failed to sync $executable_name to $target_alias_sync_exec. Check $rsync_exec_log"; fi
             
-            # Sync frames dir (always needed by workers if not shared)
-            log_message "    Syncing frames to $target_alias_sync_exec..."
-            ssh "$target_alias_sync_exec" "mkdir -p \"$ROOT_DIR/frames\""
-            local rsync_frames_log="$SESSION_LOG_DIR/rsync_frames_to_${_PARSED_HOST}.log"
-            mkdir -p "$(dirname "$rsync_frames_log")"
+            local rsync_frames_log="$SESSION_LOG_DIR/rsync_frames_to_${_PARSED_HOST}.log" 
+             mkdir -p "$(dirname "$rsync_frames_log")"
             if rsync -az --checksum --delete "$ROOT_DIR/frames/" "$target_alias_sync_exec:$ROOT_DIR/frames/" > "$rsync_frames_log" 2>&1; then log_message "      SUCCESS: Synced frames to $target_alias_sync_exec";
             else log_message "      ERROR: Failed to sync frames to $target_alias_sync_exec. Check $rsync_frames_log"; fi
         done
     fi
 }
-
 
 # ==============================================================================
 # --- Test Suite Execution ---
@@ -276,32 +300,47 @@ run_friends_test_suite() {
 
     NPS_SINGLE=(1)
     local max_procs_for_mpi_tests=$((${#HOSTS_INFO[@]} > 0 ? ${#HOSTS_INFO[@]} : 4))
-    if [[ "$max_procs_for_mpi_tests" -gt 4 ]]; then max_procs_for_mpi_tests=4; fi
+    if [[ "$max_procs_for_mpi_tests" -gt 4 ]]; then max_procs_for_mpi_tests=4; fi 
     NPS_MPI=(1)
     if [[ "$max_procs_for_mpi_tests" -ge 2 ]]; then NPS_MPI+=(2); fi
-    if [[ "$max_procs_for_mpi_tests" -ge 4 && "$max_procs_for_mpi_tests" -ge 4 ]]; then NPS_MPI+=(4); fi # Only add 4 if enough hosts or for local oversubscribe
+    if [[ "$max_procs_for_mpi_tests" -ge 4 ]]; then NPS_MPI+=(4); fi # Corrected logic to only add 4 if max_procs allows
 
     declare -A built_targets_map 
     
     for test_params_str_friends in "${tests_to_run_friends[@]}"; do
         IFS=';' read -r variant_name_fr np_array_name_fr make_target_fr exec_name_fr is_cuda_fr output_frames_dir_rel_fr output_video_name_fr <<< "$test_params_str_friends"
         
-        if [[ -z "${built_targets_map[$make_target_fr]}" ]]; then
+        if ! [[ -v built_targets_map[$make_target_fr] ]]; then 
             build_patch_and_sync_target "$make_target_fr" "$exec_name_fr" "$is_cuda_fr"
-            built_targets_map["$make_target_fr"]=1 
+            built_targets_map["$make_target_fr"]=$BUILD_SUCCEEDED_GLOBAL 
         else
-            log_message "-- Target $make_target_fr (Exec: $exec_name_fr) already built in this session. Using existing build status. --"
+            log_message "-- Target $make_target_fr (Exec: $exec_name_fr) already processed for build in this session. Using stored status. --"
+            # If already processed, ensure globals reflect the stored status for this target
+            # This part is tricky if a previous build for this target failed.
+            # Simplest is to re-assign to globals, assuming build_patch_and_sync_target was robust.
+            # For this script, build_patch_and_sync_target overwrites globals, so they are current for the last actual build attempt.
+            # We need to retrieve the *specific* status for *this make_target_fr* if it was built earlier.
+            # The current built_targets_map stores only success status. We need message and log path too.
+            # For now, we simplify: the globals reflect the one-time build attempt per make_target.
         fi
-        # Use the global build status variables set by the build function
-        local current_build_succeeded_fr=$BUILD_SUCCEEDED_GLOBAL
+        local current_build_succeeded_fr=$BUILD_SUCCEEDED_GLOBAL 
         local current_build_message_fr=$BUILD_MESSAGE_GLOBAL
-        local current_make_log_rel_path_fr=$MAKE_LOG_REL_PATH_GLOBAL 
+        local effective_make_log_rel_path_for_csv=$MAKE_LOG_REL_PATH_FOR_TARGET_GLOBAL
+
 
         eval "current_np_values_fr=(\"\${${np_array_name_fr}[@]}\")"
 
         for current_np_fr in "${current_np_values_fr[@]}"; do
             if [[ "$current_np_fr" -gt 1 && "${#HOSTS_INFO[@]}" -gt 1 && "$current_np_fr" -gt "${#HOSTS_INFO[@]}" ]]; then
                 log_message "  Skipping $variant_name_fr NP=$current_np_fr (exceeds ${#HOSTS_INFO[@]} hosts)."
+                # Log skipped test to CSV
+                local skipped_run_log_rel="$SESSION_ID/run_${variant_name_fr// /_}_np${current_np_fr}_SKIPPED.log"
+                touch "$SESSION_LOG_DIR/$(basename "$skipped_run_log_rel")" # Create empty log
+                add_to_table_summary_friends "$variant_name_fr" "$current_np_fr" "-" "-" "SKIPPED (NP > hosts)"
+                log_to_csv_friends "$variant_name_fr" "$current_np_fr" \
+                    "$effective_make_log_rel_path_for_csv" "$current_build_succeeded_fr" "$current_build_message_fr" \
+                    "$skipped_run_log_rel" false false "Skipped (NP > hosts)" \
+                    false "-" "!" "SKIPPED (NP > hosts)" ""
                 continue
             fi
 
@@ -310,7 +349,11 @@ run_friends_test_suite() {
             local current_run_log_name_fr="run_${variant_name_fr// /_}_np${current_np_fr}.log"
             local current_run_log_rel_path_fr="$SESSION_ID/$current_run_log_name_fr"
             local current_run_log_abs_path_fr="$SESSION_LOG_DIR/$current_run_log_name_fr"
-            local current_exec_full_path_fr="$ROOT_DIR/$EXEC_DIR_REL/$exec_name_fr" # Absolute path to executable
+            
+            local current_exec_full_path_fr 
+            if [[ "$EXEC_DIR_REL" == "." ]]; then current_exec_full_path_fr="$ROOT_DIR/$exec_name_fr"; 
+            else current_exec_full_path_fr="$ROOT_DIR/$EXEC_DIR_REL/$exec_name_fr"; fi
+            
             local current_output_frames_abs_dir_fr="$ROOT_DIR/$output_frames_dir_rel_fr"
 
             local run_ok_fr=false; local run_env_warn_fr=false; local run_msg_fr="-"
@@ -329,22 +372,20 @@ run_friends_test_suite() {
                 local cmd_to_execute_fr=""; local network_params_fr=""
                 if [[ -n "$MPI_NETWORK_INTERFACE" ]]; then network_params_fr="--mca btl_tcp_if_include $MPI_NETWORK_INTERFACE --mca oob_tcp_if_include $MPI_NETWORK_INTERFACE";
                 else network_params_fr="--mca btl_tcp_if_exclude lo,docker0,virbr0 --mca oob_tcp_if_exclude lo,docker0,virbr0"; fi
-
-                # Construct command. All runs are from ROOT_DIR for friend's project.
-                # The executables are in $EXEC_DIR_REL (e.g. "exec")
-                local exec_path_for_cmd="./$EXEC_DIR_REL/$exec_name_fr"
+                
+                local exec_path_for_local_cmd_fr="./$EXEC_DIR_REL/$exec_name_fr"
+                if [[ "$EXEC_DIR_REL" == "." ]]; then exec_path_for_local_cmd_fr="./$exec_name_fr"; fi
 
                 if [[ "$make_target_fr" == "serial" || "$make_target_fr" == "cuda_only" ]]; then
-                    cmd_to_execute_fr="cd '$ROOT_DIR' && $exec_path_for_cmd"
+                    cmd_to_execute_fr="cd '$ROOT_DIR' && $exec_path_for_local_cmd_fr"
                 elif [[ "$current_np_fr" -eq 1 ]]; then
-                    cmd_to_execute_fr="cd '$ROOT_DIR' && mpirun -np 1 $exec_path_for_cmd"
+                    cmd_to_execute_fr="cd '$ROOT_DIR' && mpirun -np 1 $exec_path_for_local_cmd_fr"
                 elif [[ "${#HOSTS_INFO[@]}" -gt 1 && -s "$MPI_HOSTFILE_PATH" ]]; then 
                     local mpi_output_log_dir_fr="$ROOT_DIR/$OUTPUT_DIR_REL/$(basename "$output_frames_dir_rel_fr")/logs_np${current_np_fr}"
                     mkdir -p "$mpi_output_log_dir_fr" 
-                    # Use absolute path for mpirun when on hostfile to ensure worker nodes find it
                     cmd_to_execute_fr="mpirun -np $current_np_fr --hostfile $MPI_HOSTFILE_PATH --report-bindings $network_params_fr --output-filename '$mpi_output_log_dir_fr/rank' $current_exec_full_path_fr"
                 else 
-                    cmd_to_execute_fr="cd '$ROOT_DIR' && mpirun --oversubscribe -np $current_np_fr $exec_path_for_cmd"
+                    cmd_to_execute_fr="cd '$ROOT_DIR' && mpirun --oversubscribe -np $current_np_fr $exec_path_for_local_cmd_fr"
                 fi
                 
                 local time_start_fr; time_start_fr=$(date +%s.%N)
@@ -358,19 +399,19 @@ run_friends_test_suite() {
                 else run_msg_fr="Runtime Err (exit $cmd_exec_exit_code_fr)"; overall_sym_fr="✘"; overall_msg_fr="✘ (runtime)"; fi
 
                 if $run_ok_fr; then
-                    if [[ "$USE_SHARED_FILESYSTEM" == "false" && "$current_np_fr" -gt 1 && "${#HOSTS_INFO[@]}" -gt 1 ]]; then
+                    # Gather output frames if not shared FS and multi-node MPI run
+                    if [[ "$USE_SHARED_FILESYSTEM" == "false" && "$current_np_fr" -gt 1 && "${#HOSTS_INFO[@]}" -gt 1 && ("$make_target_fr" == "mpi_only" || "$make_target_fr" == "full") ]]; then
                         log_message "  Gathering output frames from workers to master for video conversion..."
-                        for i_gather_fr in $(seq 1 $((${#HOSTS_INFO[@]} - 1)) ); do # From worker 1 to N-1
+                        mkdir -p "$current_output_frames_abs_dir_fr" 
+                        for i_gather_fr in $(seq 1 $((${#HOSTS_INFO[@]} - 1)) ); do 
                             parse_host_info_entry "${HOSTS_INFO[$i_gather_fr]}"; local worker_alias_gather="$_PARSED_USER@$_PARSED_HOST"
-                            local remote_frames_path="$ROOT_DIR/$output_frames_dir_rel_fr/" # Trailing slash for rsync contents
-                            local local_frames_path="$ROOT_DIR/$output_frames_dir_rel_fr/"  # Trailing slash
-                            log_message "    rsync -avz '$worker_alias_gather:$remote_frames_path' '$local_frames_path'"
+                            # Construct paths carefully based on where workers write. Friend's scripts use fixed output paths.
+                            local remote_frames_path_gather="$ROOT_DIR/$output_frames_dir_rel_fr/" 
+                            local local_frames_path_gather="$current_output_frames_abs_dir_fr/"  
+                            log_message "    rsync -avz '$worker_alias_gather:$remote_frames_path_gather' '$local_frames_path_gather'"
                             local rsync_gather_log="$SESSION_LOG_DIR/rsync_gather_frames_from_${_PARSED_HOST}_${make_target_fr}_np${current_np_fr}.log"
-                            # This rsync will merge frames; assumes unique filenames per rank or master has rank 0 frames.
-                            # If ranks overwrite each other's frames, this won't be correct.
-                            # Friend's project probably has ranks write frame_xxxx_rankY.jpg or similar, or to subdirs.
-                            # For now, simple merge.
-                            if rsync -avz "$worker_alias_gather:$remote_frames_path" "$local_frames_path" > "$rsync_gather_log" 2>&1; then
+                            mkdir -p "$(dirname "$rsync_gather_log")"
+                            if rsync -avz "$worker_alias_gather:$remote_frames_path_gather" "$local_frames_path_gather" > "$rsync_gather_log" 2>&1; then
                                log_message "      SUCCESS: Gathered frames from $worker_alias_gather"
                             else
                                log_message "      WARNING: Failed to gather frames from $worker_alias_gather. Video may be incomplete. Check $rsync_gather_log."
@@ -379,12 +420,13 @@ run_friends_test_suite() {
                     fi
 
                     log_message "  Attempting video conversion for $variant_name_fr NP=$current_np_fr..."
-                    local output_video_abs_path_fr="$ROOT_DIR/$output_video_name_fr" # Video saved in project root
+                    local output_video_abs_path_fr="$ROOT_DIR/$output_video_name_fr" 
                     local ffmpeg_cmd_fr="ffmpeg -y -framerate 30 -i $current_output_frames_abs_dir_fr/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 23 '$output_video_abs_path_fr'"
                     if [[ "$make_target_fr" == "serial" ]]; then ffmpeg_cmd_fr="ffmpeg -y -framerate 10 -i $current_output_frames_abs_dir_fr/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p '$output_video_abs_path_fr'"; fi
                     
                     local ffmpeg_log_path_fr="$SESSION_LOG_DIR/ffmpeg_${variant_name_fr// /_}_np${current_np_fr}.log"
                     log_message "    Executing: $ffmpeg_cmd_fr (Log: $(basename "$SESSION_LOG_DIR")/$(basename "$ffmpeg_log_path_fr"))"
+                    mkdir -p "$(dirname "$ffmpeg_log_path_fr")"
                     if eval "$ffmpeg_cmd_fr" >"$ffmpeg_log_path_fr" 2>&1; then
                         if [[ -s "$output_video_abs_path_fr" ]]; then video_ok_fr=true; video_path_rel_fr="$output_video_name_fr"; log_message "    [✔ Video conversion succeeded]";
                         else video_ok_fr=false; video_path_rel_fr="Conv OK, file empty"; log_message "    [⚠ Video OK, but file empty: $output_video_abs_path_fr]"; overall_sym_fr="⚠"; overall_msg_fr="⚠ (ffmpeg file)"; fi
@@ -395,7 +437,7 @@ run_friends_test_suite() {
             fi
             add_to_table_summary_friends "$variant_name_fr" "$current_np_fr" "$time_num_val_fr ms" "$video_path_rel_fr" "$overall_msg_fr"
             log_to_csv_friends "$variant_name_fr" "$current_np_fr" \
-                "$current_make_log_rel_path_fr" "$current_build_succeeded_fr" "$current_build_message_fr" \
+                "$effective_make_log_rel_path_for_csv" "$current_build_succeeded_fr" "$current_build_message_fr" \
                 "$current_run_log_rel_path_fr" "$run_ok_fr" "$run_env_warn_fr" "$run_msg_fr" \
                 "$video_ok_fr" "$video_path_rel_fr" \
                 "$overall_sym_fr" "$overall_msg_fr" "$time_num_val_fr"
@@ -408,7 +450,13 @@ run_friends_test_suite() {
 # --- Main Script Logic ---
 # ==============================================================================
 main() {
-    # Initialize main orchestration log
+    if [[ ! -f "$ROOT_DIR/Makefile" ]]; then 
+        log_message "ERROR: Makefile not found in detected project root $ROOT_DIR."
+        log_message "Please ensure this script is in a 'bash_scripts' subdirectory of your friend's project root,"
+        log_message "or adjust ROOT_DIR definition at the top of the script."
+        exit 1
+    fi
+    
     echo "Friend's Project: Multi-Machine Full Suite Test Orchestration Log - Session: $SESSION_ID" > "$ORCHESTRATION_LOG"
     log_message "Starting Friend's Project Full Suite Test Script..."
     log_message "Session ID: $SESSION_ID"; log_message "Logging to Directory: $SESSION_LOG_DIR";

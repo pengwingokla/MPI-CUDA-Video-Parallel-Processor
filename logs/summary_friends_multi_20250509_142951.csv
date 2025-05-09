@@ -1,0 +1,1 @@
+SessionID,MachineSetOrMaster,GitCommit,EntryTimestamp,ProjectVariant,NumProcesses,MakeLogFile,BuildSucceeded,BuildMessage,RunLogFile,RunCommandSucceeded,RunEnvironmentWarning,RunMessage,OutputVideoCreated,OutputVideoPath,OverallStatusSymbol,OverallStatusMessage,ExecutionTime_ms

@@ -1,0 +1,44 @@
+Friend's Project: Multi-Machine Full Suite Test Orchestration Log - Session: friends_multirun_20250509_142951_nixos
+[2025-05-09 14:29:51] Starting Friend's Project Full Suite Test Script...
+[2025-05-09 14:29:51] Session ID: friends_multirun_20250509_142951_nixos
+[2025-05-09 14:29:51] Logging to Directory: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142951_nixos
+[2025-05-09 14:29:51] Project Root (Friend's): /home/myko/MPI-CUDA-Video-Parallel-Processor
+[2025-05-09 14:29:51] Target hosts configured:
+[2025-05-09 14:29:51]   - myko@192.168.1.158 50
+[2025-05-09 14:29:51]   - myko@192.168.1.97 50
+[2025-05-09 14:29:51] --- Running Initial Cluster-Wide Setup for Friend's Project ---
+[2025-05-09 14:29:51] --- Phase 1: SSH Setup ---
+[2025-05-09 14:29:51] Checking SSH to myko@192.168.1.158 from myko@192.168.1.158...
+[2025-05-09 14:29:51] SUCCESS: Passwordless SSH to myko@192.168.1.158.
+[2025-05-09 14:29:51] Checking SSH to myko@192.168.1.97 from myko@192.168.1.158...
+[2025-05-09 14:29:52] SUCCESS: Passwordless SSH to myko@192.168.1.97.
+[2025-05-09 14:29:52] --- SSH Setup Phase Completed ---
+[2025-05-09 14:29:52] Combined CUDA arch flags for builds: -gencode arch=compute_50,code=sm_50 -gencode arch=compute_50,code=compute_50 
+[2025-05-09 14:29:52] --- Preparing Input Frames (on master node) ---
+[2025-05-09 14:29:52] Found video cappy.mp4. Extracting frames using /home/myko/MPI-CUDA-Video-Parallel-Processor/src/extract_frames.py to /home/myko/MPI-CUDA-Video-Parallel-Processor/frames/
+[2025-05-09 14:30:26] Frame extraction complete. See /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142951_nixos/frame_extraction.log.
+[2025-05-09 14:30:26] --- Syncing Project Root to Worker Nodes (includes frames, excludes build/exec/output initially) ---
+[2025-05-09 14:30:26] Initial sync of /home/myko/MPI-CUDA-Video-Parallel-Processor/ to myko@192.168.1.97:/home/myko/MPI-CUDA-Video-Parallel-Processor/
+[2025-05-09 14:30:27]   Executing rsync (Log: friends_multirun_20250509_142951_nixos/rsync_initial_to_192.168.1.97.log)...
+[2025-05-09 14:30:29] SUCCESS: Initial sync to myko@192.168.1.97.
+[2025-05-09 14:30:29] --- Initial Sync Phase Completed ---
+[2025-05-09 14:30:29] --- Creating MPI Hostfile ---
+[2025-05-09 14:30:29] MPI Hostfile: /home/myko/MPI-CUDA-Video-Parallel-Processor/logs/friends_multirun_20250509_142951_nixos/mpi_cluster_hosts.txt
+192.168.1.158 slots=1
+192.168.1.97 slots=1
+[2025-05-09 14:30:29] --- MPI Hostfile Creation Phase Completed ---
+[2025-05-09 14:30:29] --- Initial Cluster-Wide Setup Completed ---
+[2025-05-09 14:30:29] --- Starting Friend's Project Test Suite ---
+[2025-05-09 14:30:29] -- Building Target: serial (Executable: /home/myko/MPI-CUDA-Video-Parallel-Processor/exec_serial) --
+[2025-05-09 14:30:29]   Ensuring directory for executable exists: /home/myko/MPI-CUDA-Video-Parallel-Processor (project root)
+[2025-05-09 14:30:29]   Attempting to remove old executable (if any): /home/myko/MPI-CUDA-Video-Parallel-Processor/exec_serial
+[2025-05-09 14:30:29]   Executing build: make -C '/home/myko/MPI-CUDA-Video-Parallel-Processor' serial (Log: friends_multirun_20250509_142951_nixos/make_serial.log)
+[2025-05-09 14:30:29]   Attempting to patchelf /home/myko/MPI-CUDA-Video-Parallel-Processor/exec_serial for NixOS...
+[2025-05-09 14:30:32]     [⚠ Could not find all paths for patchelf or RPATH empty. Skipping for exec_serial.]
+[2025-05-09 14:30:32]     Build Status for exec_serial: Build OK (patchelf skipped)
+[2025-05-09 14:30:32]   Syncing built /home/myko/MPI-CUDA-Video-Parallel-Processor/exec_serial and critical data (frames) to worker nodes...
+[2025-05-09 14:30:32]     Syncing to myko@192.168.1.97...
+[2025-05-09 14:30:34]       SUCCESS: Synced exec_serial to myko@192.168.1.97
+[2025-05-09 14:30:36]       SUCCESS: Synced frames to myko@192.168.1.97
+[2025-05-09 14:30:36] === Testing Serial (NP=1) ===
+[2025-05-09 14:30:36]   -> Executing: cd '/home/myko/MPI-CUDA-Video-Parallel-Processor' && ./exec_serial (Log: friends_multirun_20250509_142951_nixos/run_Serial_np1.log)
