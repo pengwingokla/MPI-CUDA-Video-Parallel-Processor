@@ -7,3 +7,4 @@ output/
 frames/
 venv/
 segmentation/
+.venv/
