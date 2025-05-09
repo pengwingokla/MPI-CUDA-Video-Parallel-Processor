@@ -22,4 +22,4 @@ echo "==> RUNNING SERIAL VERSION..."
 ./exec_serial
 
 echo "==> CONVERTING FRAMES TO VIDEO..."
-ffmpeg -y -framerate 10 -i output/output_serial/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_serial.mp4
+ffmpeg -y -framerate 30 -i output/output_serial/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p output_serial.mp4
