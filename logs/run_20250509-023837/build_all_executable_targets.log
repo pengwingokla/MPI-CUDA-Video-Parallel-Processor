@@ -1,0 +1,19 @@
+mpicc -c src/main_serial.c -o build/obj/main_serial.o -Iinclude -O2 -Wall
+mpicc -c src/frame_io.c -o build/obj/frame_io_serial.o -Iinclude -O2 -Wall
+mpicc -c src/utils.c -o build/obj/utils_serial.o -Iinclude -O2 -Wall
+mpicc -O2 -Wall -Iinclude -c src/main_mpi.c -o build/obj/main_mpi.o
+mpicc -O2 -Wall -Iinclude -c src/frame_io.c -o build/obj/frame_io.o
+mpicc -O2 -Wall -Iinclude -c src/utils.c -o build/obj/utils.o
+mpicc -O2 -Wall -Iinclude -c src/main_cuda.c -o build/obj/main_cuda.o
+mpicc -O2 -Wall -Iinclude -c src/main_mpi_cuda.c -o build/obj/main_mpi_cuda.o
+mpicc -O2 -Wall -Iinclude -c src/master.c -o build/obj/master.o
+mpicc -O2 -Wall -Iinclude -c src/worker_cuda.c -o build/obj/worker_cuda.o
+mpicc -O2 -Wall -Iinclude -c src/task_queue.c -o build/obj/task_queue.o
+src/task_queue.c: In function ‘init_task_queue’:
+src/task_queue.c:30:5: warning: implicit declaration of function ‘qsort’ [-Wimplicit-function-declaration]
+   30 |     qsort(queue->filenames, queue->total_tasks, MAX_FILENAME_LEN,
+      |     ^~~~~
+mpicc -o exec_mpi_only build/obj/main_mpi.o build/obj/frame_io.o build/obj/utils.o -lm
+mpicc -o exec_cuda_only build/obj/main_cuda.o build/obj/frame_io.o build/obj/utils.o build/obj/cuda_filter.o -lcudart -lm
+mpicc -o exec_full build/obj/main_mpi_cuda.o build/obj/master.o build/obj/worker_cuda.o build/obj/frame_io.o build/obj/task_queue.o build/obj/utils.o build/obj/cuda_filter.o -lcudart -lm
+mpicc -o exec_serial build/obj/main_serial.o build/obj/frame_io_serial.o build/obj/utils_serial.o -lm
