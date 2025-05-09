@@ -1,52 +1,43 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-# scrape_project.sh
-# -----------------
-# Collects all the key project files into a single text file,
-# with each file’s contents wrapped in Markdown-style code fences.
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
-OUTPUT=${1:-project_snapshot.txt}
-> "$OUTPUT"
+# --- Project Structure Setup ---
+FRAMES_DIR="frames"
+OUTPUT_DIR="output"
+BASH_SCRIPTS_DIR="bash_scripts"
 
-# List of “relevant” files and directories to include
-FILES=(
-  "shell.nix"
-  "Makefile"
-  "run_all.sh"
-  "bash_scripts/v1_serial.sh"
-  "bash_scripts/v2_mpi.sh"
-  "bash_scripts/v3_cuda.sh"
-  "bash_scripts/v4_full.sh"
-  "src/extract_frames.py"
-  "src/main_serial.c"
-  "src/main_mpi.c"
-  "src/main_cuda.c"
-  "src/main_mpi_cuda.c"
-  "src/master.c"
-  "src/task_queue.c"
-  "src/utils.c"
-  "src/worker_cuda.c"
-  "include/cuda_filter.h"
-  "include/cuda_segmentation.h"
-  "include/frame_io.h"
-  "include/stb_image_write.h"
-#   "include/stb_image.h"
-  "include/task_queue.h"
-  "include/utils.h"
-)
+echo "[PROJECT] Ensuring directory structure..."
+mkdir -p "$FRAMES_DIR"
+mkdir -p "$OUTPUT_DIR"
+echo "[PROJECT] '$FRAMES_DIR' and '$OUTPUT_DIR' directories ensured."
 
-for path in "${FILES[@]}"; do
-  # Expand any globs (e.g. src/*.c) and skip missing
-  for file in $path; do
-    [[ -f "$file" ]] || continue
+if [ -d "$BASH_SCRIPTS_DIR" ]; then
+  echo "[PROJECT] Making bash scripts in '$BASH_SCRIPTS_DIR/' executable..."
+  chmod +x "$BASH_SCRIPTS_DIR"/*.sh
+  echo "[PROJECT] Bash scripts are now executable."
+else
+  echo "[WARN] '$BASH_SCRIPTS_DIR' directory not found. Cannot make scripts executable."
+fi
 
-    echo "### File: $file" >> "$OUTPUT"
-    echo '```'       >> "$OUTPUT"
-    cat "$file"      >> "$OUTPUT"
-    echo '```'       >> "$OUTPUT"
-    echo            >> "$OUTPUT"
-  done
-done
+# --- Video File Check ---
+VIDEO_FILE_CANDIDATE=$(find . -maxdepth 1 -iname "*.mp4" -print -quit 2>/dev/null)
+if [ -n "$VIDEO_FILE_CANDIDATE" ]; then
+    echo "[PROJECT] Found a video file: '$VIDEO_FILE_CANDIDATE'."
+    echo "          Please ensure your 'src/extract_frames.py' script is configured to use your desired input video."
+else
+    echo "[WARN] No .mp4 video found in the project root. Make sure to add your video file"
+    echo "         and update 'src/extract_frames.py' if necessary before extracting frames."
+fi
 
-echo "✔ Written project snapshot to '$OUTPUT'"
+echo ""
+echo "--- Setup Script Finished ---"
+echo "What to do next:"
+echo "1. CRITICAL: Ensure 'numpy', 'opencv-python', and 'pyparsing' are NOT in 'requirements.txt'."
+echo "2. If not already done, add your MP4 video to the project."
+echo "3. Ensure 'src/extract_frames.py' points to your video file."
+echo "4. The venv ('$VENV_DIR') should be active. If you open a new shell, re-enter nix-shell then 'source $VENV_DIR/bin/activate'."
+echo "5. Extract frames: python3 src/extract_frames.py"
+echo "6. Compile and run your project using the scripts in '$BASH_SCRIPTS_DIR/'."
+echo ""
