@@ -3,7 +3,18 @@ Thought for a second
 
 # QuickStart Guide for MPI+CUDA Video Processing Pipeline
 
-Welcome! This guide will walk you through setting up, building, and running the **MPI+CUDA Video Pipeline** on NixOS (or any system using Nix), using the provided `shell.nix`, `run_all.sh`, and project sources. By the end, you will have extracted frames from your video, processed them in four different modes (serial, MPI-only, CUDA-only, and MPI+CUDA hybrid), and reassembled the outputs into playable videos.
+Welcome! This guide will walk you through setting up, building, and running the **MPI+CUDA Video Pipeline** on NixOS (or any system using Nix), using the provided `shell.nix`, `run_all.sh`, and project sources.
+
+## Overview
+
+This project implements a video processing pipeline with **four different versions**, each demonstrating different parallelization approaches:
+
+1. **Serial Version** (`exec_serial`) - Single-threaded CPU processing, serves as the baseline implementation
+2. **CUDA-Only Version** (`exec_cuda_only`) - GPU-accelerated processing using CUDA kernels for parallel frame processing
+3. **MPI-Only Version** (`exec_mpi_only`) - Distributed processing using MPI to parallelize across multiple CPU processes
+4. **MPI+CUDA Hybrid Version** (`exec_full`) - Combines MPI for distributed processing with CUDA for GPU acceleration on each node
+
+By the end of this guide, you will have extracted frames from your video, processed them using all four versions, and reassembled the outputs into playable videos for comparison.
 
 ---
 
@@ -34,19 +45,34 @@ Welcome! This guide will walk you through setting up, building, and running the 
 
 ```
 .
-├── bash_scripts/         # Legacy per-version helpers
-├── build/                # .o files (auto-created)
-├── exec/                 # Patched executables (populated after `make` + patch)
+├── bin/                  # Compiled executables (populated after `make`)
+│   ├── exec_serial
+│   ├── exec_mpi_only
+│   ├── exec_cuda_only
+│   └── exec_full
+├── build/                # Build artifacts
+│   └── obj/              # Object files (.o files, auto-created)
+├── config/               # Configuration files
+│   └── myhost.txt        # MPI hostfile
+├── data/                 # Data files
+│   ├── videos/           # Input video files
+│   └── output/           # Output video files (.mp4)
 ├── frames/               # JPEG frames extracted from video
 ├── include/              # Header files
 ├── logs/                 # Run logs (auto-created)
-├── output/               # Processed frames & final .mp4 outputs
+├── output/               # Processed frames directory
+├── scripts/              # Shell scripts for running different versions
+│   ├── run_all.sh        # End-to-end runner script
+│   ├── v1_serial.sh
+│   ├── v2_mpi.sh
+│   ├── v3_cuda.sh
+│   ├── v4_full.sh
+│   └── run_full_cluster.sh
 ├── src/                  # C / CUDA / MPI / Python sources
 ├── shell.nix             # Nix development shell
-├── run_all.sh            # End-to-end runner script
-├── scrape_project.sh     # Snapshot script
 ├── Makefile              # Top-level build rules
-└── panda.mp4             # Example input video
+├── README.md             # Project documentation
+└── requirements.txt      # Python dependencies
 ```
 
 * **`shell.nix`** defines a lightweight Nix shell with `gcc`, `openmpi`, `cudaToolkit`, `ffmpeg`, and a Python 3 environment with OpenCV.
@@ -56,7 +82,7 @@ Welcome! This guide will walk you through setting up, building, and running the 
   * `exec_mpi_only`
   * `exec_cuda_only`
   * `exec_full` (MPI+CUDA hybrid)
-* **`run_all.sh`** invokes all four executables in sequence, logs output, and reassembles processed frames via `ffmpeg`.
+* **`scripts/run_all.sh`** invokes all four executables in sequence, logs output, and reassembles processed frames via `ffmpeg`.
 * **`src/`** contains:
 
   * C implementations for serial, MPI, CUDA, and hybrid versions
@@ -105,16 +131,9 @@ make clean
 
 # Build all four executables in parallel
 make -j"$(nproc)"
-
-# Copy them into exec/
-mkdir -p exec
-cp exec_serial exec/exec_serial
-cp exec_mpi_only exec/exec_mpi_only
-cp exec_cuda_only exec/exec_cuda_only
-cp exec_full exec/exec_full
 ```
 
-You should now have `exec/exec_serial`, `exec/exec_mpi_only`, `exec/exec_cuda_only`, and `exec/exec_full`.
+You should now have `bin/exec_serial`, `bin/exec_mpi_only`, `bin/exec_cuda_only`, and `bin/exec_full`.
 
 ---
 
@@ -135,7 +154,7 @@ By default, dynamically linked binaries built in Nix cannot run outside the stor
 2. **Patch each executable**:
 
    ```bash
-   for BIN in exec/exec_serial exec/exec_mpi_only exec/exec_cuda_only exec/exec_full; do
+   for BIN in bin/exec_serial bin/exec_mpi_only bin/exec_cuda_only bin/exec_full; do
      patchelf --set-interpreter "$LOADER" "$BIN"
      patchelf --set-rpath "$GLIBC_LIB:$MPI_LIB:$NVCC_LIB:$CUDART_LIB" "$BIN"
    done
@@ -144,8 +163,8 @@ By default, dynamically linked binaries built in Nix cannot run outside the stor
 3. **Verify**:
 
    ```bash
-   readelf -l exec/exec_serial | grep 'Requesting program interpreter'
-   readelf -d exec/exec_serial | grep RUNPATH
+   readelf -l bin/exec_serial | grep 'Requesting program interpreter'
+   readelf -d bin/exec_serial | grep RUNPATH
    ```
 
 ---
@@ -155,29 +174,29 @@ By default, dynamically linked binaries built in Nix cannot run outside the stor
 Once patched, simply run:
 
 ```bash
-chmod +x run_all.sh
-./run_all.sh [optional_video.mp4]
+chmod +x scripts/run_all.sh
+./scripts/run_all.sh [optional_video.mp4]
 ```
 
-* **First argument** is the input video (defaults to `panda.mp4` if omitted).
+* **First argument** is the input video (should be in `data/videos/` directory).
 * The script will:
 
   1. **Build** all four versions (`make -j…`)
   2. **Extract** frames (if not already present)
   3. **Run** Serial → MPI-only → CUDA-only → MPI+CUDA
-  4. **Reassemble** frames into four videos under `output/`
+  4. **Reassemble** frames into four videos under `data/output/`
   5. **Log** each step to `logs/run_<timestamp>/` with detailed timing
 
-At the end, you’ll see:
+At the end, you'll see:
 
 ```
-✅ All steps completed successfully!
+✔ All steps completed successfully!
   • Logs:   logs/run_20250508-214530
   • Videos:
-      Serial:    output/serial.mp4
-      MPI-only:  output/mpi.mp4
-      CUDA-only: output/cuda.mp4
-      MPI+CUDA:  output/mpi_cuda.mp4
+      Serial:    data/output/output_serial.mp4
+      MPI-only:  data/output/output_mpi_only.mp4
+      CUDA-only: data/output/output_cuda.mp4
+      MPI+CUDA:  data/output/output_mpi_cuda.mp4
 ```
 
 ---
@@ -189,29 +208,29 @@ If you want to run each version in isolation:
 1. **Serial**
 
    ```bash
-   ./exec/exec_serial frames output/serial
-   ffmpeg -y -framerate 30 -i output/serial/frame_%04d.jpg -c:v libx264 output/serial.mp4
+   ./bin/exec_serial frames output/output_serial
+   ffmpeg -y -framerate 30 -i output/output_serial/frame_%04d.jpg -c:v libx264 data/output/output_serial.mp4
    ```
 
 2. **MPI-only**
 
    ```bash
-   mpirun --oversubscribe -np 4 ./exec/exec_mpi_only frames output/mpi
-   ffmpeg -y -framerate 30 -i output/mpi/frame_%04d.jpg -c:v libx264 output/mpi.mp4
+   mpirun --oversubscribe -np 4 ./bin/exec_mpi_only frames output/output_mpi
+   ffmpeg -y -framerate 30 -i output/output_mpi/frame_%04d.jpg -c:v libx264 data/output/output_mpi_only.mp4
    ```
 
 3. **CUDA-only**
 
    ```bash
-   ./exec/exec_cuda_only frames output/cuda
-   ffmpeg -y -framerate 30 -i output/cuda/frame_%04d.jpg -c:v libx264 output/cuda.mp4
+   ./bin/exec_cuda_only frames output/output_cuda
+   ffmpeg -y -framerate 30 -i output/output_cuda/frame_%04d.jpg -c:v libx264 data/output/output_cuda.mp4
    ```
 
 4. **MPI+CUDA**
 
    ```bash
-   mpirun --oversubscribe -np 8 ./exec/exec_full frames output/mpi_cuda
-   ffmpeg -y -framerate 30 -i output/mpi_cuda/frame_%04d.jpg -c:v libx264 output/mpi_cuda.mp4
+   mpirun --oversubscribe -np 8 ./bin/exec_full frames output/output_mpi_cuda
+   ffmpeg -y -framerate 30 -i output/output_mpi_cuda/frame_%04d.jpg -c:v libx264 data/output/output_mpi_cuda.mp4
    ```
 
 ---
@@ -249,9 +268,10 @@ If you want to run each version in isolation:
 
 * **Algorithm swap**: Modify `src/simple_edge_filter` or supply your own CUDA kernels in `src/cuda_filter.cu`.
 * **Frame I/O**: Swap out STB image I/O for OpenCV’s C++ API by editing `include/frame_io.h` and `src/frame_io.c`.
-* **Video parameters**: Change framerate, codec, resolution in the `ffmpeg` commands within `run_all.sh`.
+* **Video parameters**: Change framerate, codec, resolution in the `ffmpeg` commands within `scripts/run_all.sh`.
 * **Scaling to multi-node clusters**: Adjust `mpirun` hostfiles and process counts.
 
 ---
 
-You’re all set! 🚀 Enjoy experimenting with hybrid **MPI + CUDA** video processing on NixOS. If you run into issues, consult the logs under `logs/`, verify library paths, and feel free to iterate on the Nix shell or `patchelf` commands. Have fun!
+<br> You’re all set! 
+<br> Enjoy experimenting with hybrid **MPI + CUDA** video processing on NixOS. If you run into issues, consult the logs under `logs/`, verify library paths, and feel free to iterate on the Nix shell or `patchelf` commands. Have fun!

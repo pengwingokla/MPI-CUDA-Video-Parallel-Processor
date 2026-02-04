@@ -2,7 +2,9 @@ import cv2
 import os
 
 os.makedirs("frames", exist_ok=True)
-cap = cv2.VideoCapture("cappy.mp4")
+# Try new location first, then fall back to root for backward compatibility
+video_path = "data/videos/cappy.mp4" if os.path.exists("data/videos/cappy.mp4") else "cappy.mp4"
+cap = cv2.VideoCapture(video_path)
 i = 0
 while cap.isOpened():
     ret, frame = cap.read()

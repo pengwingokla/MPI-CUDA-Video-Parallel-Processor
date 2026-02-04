@@ -13,9 +13,10 @@ YELLOW=$(printf '\033[33m')
 RESET=$(printf '\033[0m')
 
 # Paths
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS="$ROOT/bash_scripts"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS="$ROOT/scripts"
 LOGROOT="$ROOT/logs"
+BIN_DIR="$ROOT/bin"
 TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
 LOGDIR="$LOGROOT/run_$TIMESTAMP"
 mkdir -p "$LOGDIR"
@@ -52,9 +53,9 @@ time_step "Patch binaries for NixOS stdenv" '
   GLIBC_LIB=$(dirname "$LOADER")
   MPI_LIB=$(dirname "$(find /nix/store -type f -path "*openmpi-*/lib/libmpi.so" | head -n1)")
   CUDART_LIB=$(dirname "$(find /nix/store -type f -path "*cudatoolkit-*/lib/libcudart.so"* | head -n1)")
-  # patch each binary in project root
+  # patch each binary in bin directory
   for BIN in exec_serial exec_mpi_only exec_cuda_only exec_full; do
-    FULL=\"$ROOT/\$BIN\"
+    FULL=\"$BIN_DIR/\$BIN\"
     patchelf --set-interpreter \"$LOADER\" \
              --set-rpath \"$GLIBC_LIB:$MPI_LIB:$CUDART_LIB\" \
              \"\$FULL\"

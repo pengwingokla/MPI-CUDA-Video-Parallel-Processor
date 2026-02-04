@@ -79,20 +79,20 @@ echo "[PYTHON] Python environment setup complete."
 
 FRAMES_DIR="frames"
 OUTPUT_DIR="output"
-BASH_SCRIPTS_DIR="bash_scripts"
+SCRIPTS_DIR="scripts"
 echo "[PROJECT] Ensuring directory structure..."
-mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR"
-echo "[PROJECT] '$FRAMES_DIR' and '$OUTPUT_DIR' directories ensured."
+mkdir -p "$FRAMES_DIR" "$OUTPUT_DIR" "data/videos" "data/output" "bin" "config"
+echo "[PROJECT] '$FRAMES_DIR', '$OUTPUT_DIR', 'data/videos', 'data/output', 'bin', and 'config' directories ensured."
 
-if [ -d "$BASH_SCRIPTS_DIR" ]; then
-  echo "[PROJECT] Making bash scripts in '$BASH_SCRIPTS_DIR/' executable..."
-  chmod +x "$BASH_SCRIPTS_DIR"/*.sh
+if [ -d "$SCRIPTS_DIR" ]; then
+  echo "[PROJECT] Making bash scripts in '$SCRIPTS_DIR/' executable..."
+  chmod +x "$SCRIPTS_DIR"/*.sh
   echo "[PROJECT] Bash scripts are now executable."
 else
-  echo "[WARN] '$BASH_SCRIPTS_DIR' directory not found."
+  echo "[WARN] '$SCRIPTS_DIR' directory not found."
 fi
 
-VIDEO_FILE_CANDIDATE=$(find . -maxdepth 1 -iname "*.mp4" -print -quit 2>/dev/null)
+VIDEO_FILE_CANDIDATE=$(find data/videos -maxdepth 1 -iname "*.mp4" -print -quit 2>/dev/null)
 if [ -n "$VIDEO_FILE_CANDIDATE" ]; then
     echo "[PROJECT] Found a video file: '$VIDEO_FILE_CANDIDATE'."
 else

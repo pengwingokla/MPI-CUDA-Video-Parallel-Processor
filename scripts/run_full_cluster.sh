@@ -11,13 +11,13 @@ HOSTS_INFO=(
 USE_SHARED_FILESYSTEM=false
 VERBOSE_RSYNC=false
 MPI_NETWORK_INTERFACE="" 
-INPUT_VIDEO_FILE="cappy.mp4" # Ensure this is in ROOT_DIR
+INPUT_VIDEO_FILE="data/videos/cappy.mp4" # Ensure this is in ROOT_DIR
 
 # --- Project & Script Globals ---
 DEFAULT_USER=$(whoami)
 MASTER_HOSTNAME_SHORT=$(hostname -s)
-# This script should be in <friends_project_root>/bash_scripts/
-# ROOT_DIR is the parent of the 'bash_scripts' directory.
+# This script should be in <project_root>/scripts/
+# ROOT_DIR is the parent of the 'scripts' directory.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" 
 LOGS_BASE_DIR="$ROOT_DIR/logs" # Friend's log directory
 mkdir -p "$LOGS_BASE_DIR"
@@ -35,8 +35,8 @@ GIT_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 _PARSED_USER=""; _PARSED_HOST=""; _PARSED_ARCH_CODE=""
 COMBINED_CUDA_ARCH_FLAGS_FOR_MAKE=""
 
-# **** CORRECTED: Executables are in the project root for friend's project ****
-EXEC_DIR_REL="." 
+# **** Executables are in the bin directory ****
+EXEC_DIR_REL="bin"
 
 EXEC_SERIAL="exec_serial"; EXEC_MPI_ONLY="exec_mpi_only"; EXEC_CUDA_ONLY="exec_cuda_only"; EXEC_FULL="exec_full"
 OUTPUT_DIR_REL="output" # Relative to ROOT_DIR

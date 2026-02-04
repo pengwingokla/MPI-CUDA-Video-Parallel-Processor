@@ -13,9 +13,10 @@ INCLUDES = -Iinclude
 SRC_DIR = src
 BUILD_DIR = build
 OBJ_DIR = $(BUILD_DIR)/obj
+BIN_DIR = bin
 
 # Ensure build dir exists
-$(shell mkdir -p $(OBJ_DIR))
+$(shell mkdir -p $(OBJ_DIR) $(BIN_DIR))
 
 # ===========================
 # Common Object Rules
@@ -32,7 +33,7 @@ $(OBJ_DIR)/cuda_filter.o: $(SRC_DIR)/cuda_filter.cu
 SERIAL_OBJS = $(OBJ_DIR)/main_serial.o $(OBJ_DIR)/frame_io_serial.o $(OBJ_DIR)/utils_serial.o
 
 serial: $(SERIAL_OBJS)
-	$(CC) -o exec_serial $^ -lm
+	$(CC) -o $(BIN_DIR)/exec_serial $^ -lm
 
 $(OBJ_DIR)/frame_io_serial.o: $(SRC_DIR)/frame_io.c
 	$(CC) -c $< -o $@ $(INCLUDES) -O2 -Wall
@@ -49,7 +50,7 @@ $(OBJ_DIR)/main_serial.o: $(SRC_DIR)/main_serial.c
 MPI_ONLY_OBJS = $(OBJ_DIR)/main_mpi.o $(OBJ_DIR)/frame_io.o $(OBJ_DIR)/utils.o
 
 mpi_only: $(MPI_ONLY_OBJS)
-	$(CC) -o exec_mpi_only $^ -lm
+	$(CC) -o $(BIN_DIR)/exec_mpi_only $^ -lm
 
 # ===========================
 # Version 3: CUDA Only
@@ -61,7 +62,7 @@ CUDA_ONLY_OBJS = \
 	$(OBJ_DIR)/cuda_filter.o
 
 cuda_only: $(CUDA_ONLY_OBJS)
-	$(CC) -o exec_cuda_only $^ $(LDFLAGS)
+	$(CC) -o $(BIN_DIR)/exec_cuda_only $^ $(LDFLAGS)
 
 # ===========================
 # Version 4: MPI + CUDA (your current)
@@ -76,7 +77,7 @@ FULL_OBJS = \
 	$(OBJ_DIR)/cuda_filter.o
 
 full: $(FULL_OBJS)
-	$(CC) -o exec_full $^ $(LDFLAGS)
+	$(CC) -o $(BIN_DIR)/exec_full $^ $(LDFLAGS)
 
 # ===========================
 # Version 5: CUDA-aware MPI (ambitious)
@@ -84,7 +85,7 @@ full: $(FULL_OBJS)
 MPI_CUDA_AWARE_OBJS = $(FULL_OBJS)  # may change later
 
 cuda_aware: $(MPI_CUDA_AWARE_OBJS)
-	$(CC) -o cuda_aware_exec $^ $(LDFLAGS)
+	$(CC) -o $(BIN_DIR)/cuda_aware_exec $^ $(LDFLAGS)
 
 # ===========================
 # Cleanup
@@ -92,13 +93,13 @@ cuda_aware: $(MPI_CUDA_AWARE_OBJS)
 .PHONY: clean serial_clean mpi_clean full_clean cuda_clean
 
 clean:
-	rm -rf $(OBJ_DIR)/*.o exec_serial exec_mpi_only exec_cuda_only exec_full cuda_aware_exec
+	rm -rf $(OBJ_DIR)/*.o $(BIN_DIR)/exec_serial $(BIN_DIR)/exec_mpi_only $(BIN_DIR)/exec_cuda_only $(BIN_DIR)/exec_full $(BIN_DIR)/cuda_aware_exec
 
 serial_clean:
-	rm -f exec_serial $(SERIAL_OBJS)
+	rm -f $(BIN_DIR)/exec_serial $(SERIAL_OBJS)
 
 mpi_clean:
-	rm -f exec_mpi_only exec_full cuda_aware_exec
+	rm -f $(BIN_DIR)/exec_mpi_only $(BIN_DIR)/exec_full $(BIN_DIR)/cuda_aware_exec
 
 cuda_clean:
-	rm -f exec_cuda_only
+	rm -f $(BIN_DIR)/exec_cuda_only

@@ -4,12 +4,15 @@
 # In a real scenario, you might get this from a file or command output.
 # This script assumes it's running in the root directory where these paths are valid.
 FILE_ENTRIES=$(cat << 'EOF'
-bash_scripts
-bash_scripts/run_full_cluster.sh
-bash_scripts/v1_serial.sh
-bash_scripts/v2_mpi.sh
-bash_scripts/v3_cuda.sh
-bash_scripts/v4_full.sh
+scripts
+scripts/run_full_cluster.sh
+scripts/v1_serial.sh
+scripts/v2_mpi.sh
+scripts/v3_cuda.sh
+scripts/v4_full.sh
+scripts/run_all.sh
+scripts/project_setup.sh
+scripts/scrape_project.sh
 build/obj
 build/obj/cuda_filter.o
 build/obj/frame_io_serial.o
@@ -22,11 +25,23 @@ build/obj/task_queue.o
 build/obj/utils_serial.o
 build/obj/utils.o
 build/obj/worker_cuda.o
-exec
-exec/exec_cuda_only
-exec/exec_full
-exec/exec_mpi_only
-exec/exec_serial
+build/obj/test_segment.o
+bin
+bin/exec_cuda
+bin/exec_cuda_only
+bin/exec_full
+bin/exec_mpi_only
+bin/exec_serial
+bin/test_segment
+bin/test_segment_label
+data/videos
+data/videos/cappy.mp4
+data/videos/cappy.mp4:Zone.Identifier
+data/videos/panda.mp4:Zone.Identifier
+data/output
+data/output/output_serial.mp4
+config
+config/myhost.txt
 frames
 include
 include/cuda_filter.h
@@ -55,37 +70,13 @@ src/utils.c
 src/worker_cuda.c
 venv
 .gitignore
-cappy.mp4
-cappy.mp4:Zone.Identifier
-CLEANING...
-COMPILING
-cuda_filter.o
-exec_cuda
-exec_cuda_only
-exec_full
-exec_serial
-frame_io.o
-main_mpi_cuda.o
 Makefile
-master.o
-myhost.txt
-output_serial.mp4
-panda.mp4:Zone.Identifier
-project_setup.sh
 project_snapshot.txt
 QUICKSTART.md
 README.md
 requirements.txt
-run_all.sh
-scrape_project.sh
 shell.nix
 SIMPLE_INSTRUCTION.md
-task_queue.o
-test_segment
-test_segment_label
-test_segment.o
-utils.o
-worker_cuda.o
 EOF
 )
 
@@ -111,16 +102,16 @@ echo "$FILE_ENTRIES" | while IFS= read -r entry; do
     # 2. Exclude specific directories, file types, and individual files
     #    we know are not relevant source code.
     if [[ "$entry" == build/obj/* ]] || \
-       [[ "$entry" == exec/* ]] || \
+       [[ "$entry" == bin/* ]] || \
+       [[ "$entry" == data/* ]] || \
+       [[ "$entry" == config/* ]] || \
        [[ "$entry" == *.o ]] || \
        [[ "$entry" == *.mp4 ]] || \
        [[ "$entry" == *.mp4:Zone.Identifier ]] || \
        [[ "$entry" == *.txt ]] || \
        [[ "$entry" == *.md ]] || \
        [[ "$entry" == ".gitignore" ]] || \
-       [[ "$entry" == "shell.nix" ]] || \
-       [[ "$entry" == "cappy.mp4:Zone.Identifier" ]] || \
-       [[ "$entry" == "panda.mp4:Zone.Identifier" ]]; then
+       [[ "$entry" == "shell.nix" ]]; then
         # For debugging: echo "Skipping excluded pattern: $entry" >&2
         continue
     fi
