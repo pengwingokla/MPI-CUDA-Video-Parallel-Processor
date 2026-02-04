@@ -2,7 +2,16 @@
 
 This project demonstrates how to build a **distributed GPU-accelerated image processing pipeline** using **MPI (Message Passing Interface)** and **CUDA (Compute Unified Device Architecture)**. It processes thousands of video frames in parallel by distributing tasks across processes (MPI) and accelerating computation per frame on the GPU (CUDA).
 
----
+## Overview
+
+This project implements a video processing pipeline with **four different versions**, each demonstrating different parallelization approaches:
+
+1. **Serial Version** (`exec_serial`) - Single-threaded CPU processing, serves as the baseline implementation
+2. **CUDA-Only Version** (`exec_cuda_only`) - GPU-accelerated processing using CUDA kernels for parallel frame processing
+3. **MPI-Only Version** (`exec_mpi_only`) - Distributed processing using MPI to parallelize across multiple CPU processes
+4. **MPI+CUDA Hybrid Version** (`exec_full`) - Combines MPI for distributed processing with CUDA for GPU acceleration on each node
+
+By executing the code, you will have extracted frames from your video, processed them using all four versions, and reassembled the outputs into playable videos for comparison.
 
 ## What This Project Does
 
