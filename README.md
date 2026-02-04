@@ -23,7 +23,6 @@ By executing the code, you will have extracted frames from your video, processed
 
 This setup is ideal for learning hybrid parallel programming that combines CPU task scheduling with GPU computation.
 
----
 
 ## Tech Stack
 
@@ -33,34 +32,40 @@ This setup is ideal for learning hybrid parallel programming that combines CPU t
 - **OpenCV (Python)** for frame extraction (optional)
 - **FFmpeg** for video reconstruction (optional)
 
----
 
-## Project Structure
+## Project Layout
 
-mpi-project/
-<br>├── src/
-<br>│   ├── main_serial.c         # Serial version
-<br>│   ├── main_cuda.cu          # CUDA-only
-<br>│   ├── main_mpi.c            # MPI-only
-<br>│   ├── main_mpi_cuda.cu      # MPI + CUDA
-<br>│   ├── master.c              # MPI master logic
-<br>│   ├── task_queue.c          # Simple task scheduler for MPI
-<br>│   ├── cuda_filter.cu        # Filtering kernels
-<br>│   ├── frame_io.c/h          # Image I/O
-<br>│   ├── utils.c/h             # Utility helpers
-<br>├── include/            
-<br>│   ├── cuda_filter.h
-<br>│   ├── frame_io.h
-<br>│   ├── task_queue.h
-<br>│   └── utils.h
-<br>├── frames/                  # Input frames
-<br>├── output/                  # Processed output
-<br>├── bash_scripts/            # Demo scripts
-<br>├── extract_frames.py        # Split video into frames
-<br>└── Makefile
-
-
----
+```
+.
+├── bin/                  # Compiled executables (populated after `make`)
+│   ├── exec_serial
+│   ├── exec_mpi_only
+│   ├── exec_cuda_only
+│   └── exec_full
+├── build/                # Build artifacts
+│   └── obj/              # Object files (.o files, auto-created)
+├── config/               # Configuration files
+│   └── myhost.txt        # MPI hostfile
+├── data/                 # Data files
+│   ├── videos/           # Input video files
+│   └── output/           # Output video files (.mp4)
+├── frames/               # JPEG frames extracted from video
+├── include/              # Header files
+├── logs/                 # Run logs (auto-created)
+├── output/               # Processed frames directory
+├── scripts/              # Shell scripts for running different versions
+│   ├── run_all.sh        # End-to-end runner script
+│   ├── v1_serial.sh
+│   ├── v2_mpi.sh
+│   ├── v3_cuda.sh
+│   ├── v4_full.sh
+│   └── run_full_cluster.sh
+├── src/                  # C / CUDA / MPI / Python sources
+├── shell.nix             # Nix development shell
+├── Makefile              # Top-level build rules
+├── README.md             # Project documentation
+└── requirements.txt      # Python dependencies
+```
 
 ## How It Works
 
